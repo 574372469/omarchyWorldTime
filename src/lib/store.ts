@@ -80,28 +80,79 @@ export function usePersistentSettings(seed: City[]) {
   return [settings, update, setSettings] as const;
 }
 
-/** A clock that ticks on the second, paused while the tab is hidden. */
+/** How often a running clock re-checks itself against the system clock. */
+const RESYNC_MS = 30_000;
+
+/**
+ * A clock that ticks on the second and keeps itself honest.
+ *
+ * The time shown is always read from the system clock, never counted up: a
+ * laptop that slept for an hour, a background tab whose timers were throttled,
+ * or a timer that fired late all correct themselves on the next tick. Ticks
+ * are scheduled to the next whole second, and a periodic resync catches a
+ * timer that has drifted, a clock that was set while the app was open, and a
+ * machine that woke from sleep without telling us.
+ */
 export function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
+
   useEffect(() => {
-    let id = 0;
-    const tick = () => setNow(Date.now());
+    let timer = 0;
+    let resync = 0;
+
+    const tick = () => {
+      const t = Date.now();
+      setNow(t);
+      // Sleep to just past the next whole second, so the digits change as the
+      // second does rather than at whatever phase the interval began.
+      const delay = 1000 - (t % 1000) + 2;
+      timer = window.setTimeout(tick, delay);
+    };
+
     const start = () => {
-      tick();
-      id = window.setInterval(tick, 1000);
-    };
-    const stop = () => window.clearInterval(id);
-    const onVisibility = () => {
       stop();
-      if (!document.hidden) start();
+      // Reading the clock first also covers waking up: the first tick shows
+      // the true time instead of whatever was on screen before sleeping.
+      tick();
+      resync = window.setInterval(() => setNow(Date.now()), RESYNC_MS);
     };
+    const stop = () => {
+      window.clearTimeout(timer);
+      window.clearInterval(resync);
+      timer = 0;
+      resync = 0;
+    };
+
+    const onVisibility = () => {
+      // A hidden tab's timers are throttled, so it stops; coming back reads
+      // the clock at once rather than resuming from a stale value.
+      if (document.hidden) stop();
+      else start();
+    };
+    // Browsers do not fire timers while a machine sleeps; these fire on the
+    // way out and on the way back, and the return path re-reads the clock.
+    const onWake = () => start();
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) start();
+    };
+
+    // A hidden tab keeps no timer at all. The state starts at the time of the
+    // render that mounted it, and coming back reads the clock again.
     if (!document.hidden) start();
+
     document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("resume", onWake);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("focus", onWake);
     return () => {
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener("resume", onWake);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("focus", onWake);
     };
   }, []);
+
   return now;
 }
 

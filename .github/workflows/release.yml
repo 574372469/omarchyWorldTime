@@ -1,8 +1,8 @@
 name: Release
 
-# A version tag builds the widget for Windows and macOS and attaches the
-# installers to a GitHub release. Running it by hand builds them too, without
-# publishing anything.
+# A version tag builds the site and the desktop widget for Windows and macOS,
+# then publishes them together on one GitHub release. Running it by hand builds
+# everything too, without publishing.
 on:
   push:
     tags: ["v*"]
@@ -12,7 +12,38 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # The static site: the same bundle Cloudflare serves, zipped for anyone
+  # who wants to host it themselves.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Zip the site
+        run: |
+          cd dist
+          zip -qr ../world-clock-web.zip .
+          cd ..
+          ls -lh world-clock-web.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: world-clock-web.zip
+          if-no-files-found: error
+
+  # The desktop widget. macOS is built for both Apple silicon and Intel in
+  # one universal binary. Both legs only build: the release is made once, by
+  # the publish job, so two jobs never race to create it.
+  desktop:
     strategy:
       fail-fast: false
       matrix:
@@ -42,17 +73,61 @@ jobs:
 
       - run: npm ci
 
+      # No tagName or releaseId, so this only builds: the publish job makes the
+      # release once, after both platforms have finished.
       - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: ${{ github.ref_type == 'tag' && format('World Clock {0}', github.ref_name) || '' }}
-          releaseBody: |
-            The world clock as a desktop widget, for Windows and macOS.
-
-            - **Windows**: `.msi` (or the `.exe` setup) — the first launch installs the WebView2 runtime if the machine lacks it.
-            - **macOS**: `.dmg` — the build is unsigned, so on first open use right-click → Open, or allow it in System Settings → Privacy & Security.
-          releaseDraft: false
-          prerelease: false
           args: ${{ matrix.args }}
+
+      # The action's own globbing, so this works the same on Windows and macOS
+      # and finds the universal build's bundles under its own target dir.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.label }}
+          path: |
+            src-tauri/target/**/release/bundle/msi/*.msi
+            src-tauri/target/**/release/bundle/nsis/*.exe
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  # One release holding every download. It waits for both platforms, so a
+  # failed build leaves no half-filled release behind.
+  publish:
+    needs: [web, desktop]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: assets
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: assets
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > notes.md <<'EOF'
+          The world clock for the web and the desktop.
+
+          - **Web**: `world-clock-web.zip` — the static site; unzip it at the root of any static host.
+          - **Windows**: `.msi` or the `.exe` setup — the first launch installs the WebView2 runtime if the machine lacks it.
+          - **macOS**: `.dmg`, universal (Apple silicon and Intel) — the build is unsigned, so on first open use right-click → Open, or allow it in System Settings → Privacy & Security.
+          EOF
+          ls -lh assets
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # A re-run of the same tag replaces the files instead of failing.
+            gh release upload "$TAG" assets/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" assets/* \
+              --verify-tag \
+              --title "World Clock $TAG" \
+              --notes-file notes.md \
+              --repo "$GITHUB_REPOSITORY"
+          fi

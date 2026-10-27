@@ -1,6 +1,7 @@
 import { alpha } from "../lib/color";
 import { t, type Lang } from "../lib/i18n";
-import { litSpans, moonPhase, type SunTimes } from "../lib/solar";
+import { formatMinutes as fmt } from "../lib/time";
+import { eventMark, litSpans, moonPhase, type SunTimes } from "../lib/solar";
 
 interface Props {
   sun: SunTimes | null;
@@ -13,6 +14,9 @@ interface Props {
   daylightMarker: string;
   rounded: boolean;
   lang: Lang;
+  city: string;
+  previewing: boolean;
+  onPreview: (minutes: number) => void;
 }
 
 /** A city's 24 hours, midnight to midnight: daylight lit, a sun or moon at now. */
@@ -26,6 +30,9 @@ export function DaylightStrip({
   daylightMarker,
   rounded,
   lang,
+  city,
+  previewing,
+  onPreview,
 }: Props) {
   const spans = sun ? litSpans(sun) : [{ x0: 6 / 24, x1: 18 / 24 }];
   const progress = minutes / 1440;
@@ -42,12 +49,20 @@ export function DaylightStrip({
           : t(lang, "allDay");
 
   return (
-    <div
-      className="strip"
-      role="img"
-      aria-label={`${label}; ${t(lang, "localTime", { time: fmt(minutes) })}`}
-      style={{ height: 18 }}
-    >
+    <div className={`strip${previewing ? " is-preview" : ""}`}>
+      <input
+        className="strip-input"
+        type="range"
+        min={0}
+        max={1439}
+        step={1}
+        value={minutes}
+        aria-label={t(lang, "previewSlider", { city })}
+        aria-valuetext={`${t(lang, "localTime", { time: fmt(minutes) })}; ${label}`}
+        title={t(lang, "previewSlider", { city })}
+        onPointerDown={(e) => e.stopPropagation()}
+        onChange={(e) => onPreview(Number(e.currentTarget.value))}
+      />
       <div
         className="strip-track"
         style={{ background: alpha(fg, 0.1), borderRadius: rounded ? 999 : 0 }}
@@ -70,7 +85,7 @@ export function DaylightStrip({
         <span
           key={i}
           className="strip-mark"
-          style={{ left: `${((m ?? 0) / 1440) * 100}%`, color: fainter }}
+          style={{ left: `${(eventMark(m) ?? 0) * 100}%`, color: fainter }}
           aria-hidden="true"
         >
           {i === 0 ? "↑" : "↓"}
@@ -86,12 +101,6 @@ export function DaylightStrip({
       </span>
     </div>
   );
-}
-
-function fmt(minutes: number | null): string {
-  if (minutes === null || !Number.isFinite(minutes)) return "—";
-  const m = ((Math.round(minutes) % 1440) + 1440) % 1440;
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
 /** Tonight's moon, drawn: a faint full disc under the lit part. */

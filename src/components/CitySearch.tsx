@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { alpha } from "../lib/color";
 import { localizedCity } from "../lib/cityNames";
 import { t, type Lang } from "../lib/i18n";
-import { zoneCatalog, type City } from "../lib/time";
+import { canonicalZone, zoneCatalog, type City } from "../lib/time";
 
 interface Props {
   existing: City[];
@@ -28,6 +28,7 @@ export function CitySearch({
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -47,14 +48,15 @@ export function CitySearch({
     const q = query.trim().toLowerCase();
     // The zone is a city's real identity: a saved city may carry either its
     // English or its local label, so matching labels alone lets duplicates in.
-    const have = new Set(existing.map((c) => c.id));
+    const have = new Set(existing.map((c) => canonicalZone(c.id)));
     const pool = catalog
-      .filter((o) => !have.has(o.value))
+      .filter((o) => !have.has(o.canonical))
       .map((o) => {
         const local = localizedCity(o.value, lang);
-        return { ...o, local, probe: `${o.label}\n${local}\n${o.value}`.toLowerCase() };
+        const spellings = [o.label, local, o.value, ...o.aliases].join("\n");
+        return { ...o, local, probe: spellings.toLowerCase() };
       });
-    if (q === "") return pool.slice(0, 8);
+    if (q === "") return pool;
     const starts: typeof pool = [];
     const contains: typeof pool = [];
     for (const o of pool) {
@@ -62,9 +64,8 @@ export function CitySearch({
       if (o.label.toLowerCase().startsWith(q) || o.local.toLowerCase().startsWith(q)) {
         starts.push(o);
       } else if (hit.includes(q)) contains.push(o);
-      if (starts.length + contains.length > 60) break;
     }
-    return [...starts, ...contains].slice(0, 40);
+    return [...starts, ...contains];
   }, [query, catalog, existing, lang]);
 
   if (!active) {
@@ -100,7 +101,10 @@ export function CitySearch({
           ref={inputRef}
           value={query}
           placeholder={t(lang, "searchPlaceholder")}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (resultsRef.current) resultsRef.current.scrollTop = 0;
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               setQuery("");
@@ -134,7 +138,7 @@ export function CitySearch({
         </button>
       </div>
 
-      <div className="search-results" role="listbox">
+      <div ref={resultsRef} className="search-results" role="listbox">
         {results.length === 0 && (
           <div className="search-empty" style={{ color: alpha(fg, 0.4) }}>
             {t(lang, "noMatch", { q: query })}
@@ -156,7 +160,7 @@ export function CitySearch({
           >
             <span className="search-result-label">{o.local || o.label}</span>
             <span className="search-result-zone" style={{ color: alpha(fg, 0.4) }}>
-              {o.local ? o.label : o.description}
+              {o.description}
             </span>
           </button>
         ))}

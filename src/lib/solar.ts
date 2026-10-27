@@ -1,6 +1,8 @@
 // Solar and globe math, ported from Omarchy's Elsewhen panel
 // (shell/plugins/panels/elsewhen/GlobeModel.js and Sun.js, MIT, © DHH).
 
+import { zoneOffsetMinutes } from "./time";
+
 const DEG = Math.PI / 180;
 
 /** Earth's obliquity — also the hero globe's lean. */
@@ -392,6 +394,7 @@ export function sunTimes(
   lon: number,
   ms: number,
   offsetMinutes: number,
+  zone?: string,
 ): SunTimes {
   const midnight = localMidnightMs(ms, offsetMinutes);
   const noon = solarNoonMs(lon, midnight + 43200000);
@@ -431,8 +434,10 @@ export function sunTimes(
     noonMs: noon,
     riseMs,
     setMs,
-    riseMinutes: (riseMs - midnight) / 60000,
-    setMinutes: (setMs - midnight) / 60000,
+    riseMinutes: (riseMs - midnight) / 60000 +
+      (zone ? zoneOffsetMinutes(zone, riseMs) - offsetMinutes : 0),
+    setMinutes: (setMs - midnight) / 60000 +
+      (zone ? zoneOffsetMinutes(zone, setMs) - offsetMinutes : 0),
     dayMinutes: (setMs - riseMs) / 60000,
   };
 }

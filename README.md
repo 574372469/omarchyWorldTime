@@ -17,10 +17,10 @@ I recently started using Omarchy Linux and was impressed by its design sensibili
 | Feature | Details |
 |---|---|
 | City list | Shows local time and date, day differences, time-zone abbreviations, and offsets. Fresh defaults are your local time zone, New York (US), London (UK), Dubai (UAE), and Sydney (Australia); duplicate zones are omitted when your local zone matches one of them. Existing customized city lists are kept. The local row stays pinned at the top and cannot be removed. |
-| Daylight strip | Shows sunrise and sunset for each city's location, the current-time marker, and the moon phase at night. |
+| Daylight strip | Shows sunrise, sunset, and the moon phase. Drag or use the arrow keys to preview a time across all cities and the globe; select the preview button to return to live time. |
 | Greetings | Shows Elsewhen's time-of-day greetings, with romanization where available. |
 | Globe | Rotatable globe with a day/night line and selectable city labels. Page pinch zoom remains available outside the draggable globe and reorder grips. |
-| Search | Add cities by searching time zones and city names. |
+| Search | Browse all time zones supported by your browser, or search by city or zone identifier. |
 | Reordering and touch | Reorder cities with the explicit grip. The list remains scrollable by touch, and draggable controls do not select text. |
 | Language | Follows the browser's detected language by default, with a manual choice of English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German, Spanish, Portuguese, Russian, Italian, or Dutch. |
 | Themes | Choose from 23 Omarchy themes, including light themes, and optionally enable rounded corners. |

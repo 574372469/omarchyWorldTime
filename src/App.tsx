@@ -9,14 +9,15 @@ import { localeOf, resolveLang, t } from "./lib/i18n";
 import { useMediaQuery, useNow, usePersistentSettings } from "./lib/store";
 import { themeById } from "./lib/themes";
 import {
-  CITIES,
   findCity,
   formatTime,
+  instantAtWallMinute,
   labelForZone,
   localParts,
   localZone,
   seedCities,
   usesTwentyFourHour,
+  zoneCatalog,
   zoneOffsetMinutes,
   type City,
 } from "./lib/time";
@@ -82,7 +83,9 @@ function coordsFor(zone: string): { lat: number; lon: number } {
 export default function App() {
   const seed = useMemo(() => seedCities(), []);
   const [settings, update] = usePersistentSettings(seed);
-  const now = useNow();
+  const liveNow = useNow();
+  const [preview, setPreview] = useState<number | null>(null);
+  const now = preview ?? liveNow;
 
   // The panel speaks the browser's language unless one is chosen; the
   // 12/24-hour convention follows the same tag.
@@ -153,6 +156,9 @@ export default function App() {
   }, []);
 
   // ---- rows
+  const previewTime = (zone: string, minutes: number) => {
+    setPreview((previous) => instantAtWallMinute(zone, previous ?? liveNow, minutes));
+  };
   const pickCity = (id: string) => setPicked((p) => (p === id ? null : id));
   const toggleHour24 = () => update({ hour24: !hour24 });
   const toggleOffset = () =>
@@ -274,11 +280,20 @@ export default function App() {
   // ---- keyboard
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement) {
+        // A focused timeline keeps its arrow keys; Esc still leaves the preview.
+        if (e.key === "Escape" && e.target.type === "range" && preview !== null) {
+          e.preventDefault();
+          setPreview(null);
+        }
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "t" || e.key === "T") toggleHour24();
       else if (e.key === "g" || e.key === "G") setGlobeMode((v) => !v);
       else if (e.key === "Escape") {
         if (globeMode) setGlobeMode(false);
+        else if (preview !== null) setPreview(null);
         else if (picked) setPicked(null);
       }
     };
@@ -320,6 +335,8 @@ export default function App() {
               city={city}
               index={i}
               now={now}
+              previewing={preview !== null}
+              onPreview={previewTime}
               localOffset={localOffset}
               hour24={hour24}
               offsetMode={settings.offsetMode}
@@ -368,6 +385,11 @@ export default function App() {
       <main className="panel" aria-label="World clock">
         <header className="hero">
           <p className="hero-caption">{hereLine}</p>
+          {preview !== null && (
+            <button className="preview-reset" type="button" onClick={() => setPreview(null)}>
+              {t(lang, "previewActive")} · {t(lang, "returnToLive")}
+            </button>
+          )}
           <div className="hero-title">
             <span className="hero-word">World</span>
             <HeroGlobe
@@ -440,7 +462,7 @@ export default function App() {
             {settings.offsetMode === "utc" ? t(lang, "utcMode") : t(lang, "fromHere")}
           </button>
           <span className="bar-spacer" />
-          <span className="bar-count">{t(lang, "count", { n: settings.cities.length, total: CITIES.length })}</span>
+          <span className="bar-count">{t(lang, "count", { n: settings.cities.length, total: zoneCatalog().length })}</span>
           <a
             className="bar-button github-link"
             href="https://github.com/574372469/omarchyWorldTime"

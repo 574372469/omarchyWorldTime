@@ -74,9 +74,44 @@ export function zoneParts(zone: string, ms: number): ZoneParts {
   return partsOf(zone, ms);
 }
 
+/** Resolve a wall-clock minute on the reference instant's local date. */
+export function instantAtWallMinute(zone: string, reference: number, minute: number): number {
+  const date = zoneParts(zone, reference);
+  const wall = Date.UTC(date.year, date.month, date.day) +
+    Math.max(0, Math.min(1439, Math.round(minute))) * 60000;
+  const offsets = new Set([zoneOffsetMinutes(zone, reference)]);
+  for (const hours of [-48, -24, -12, 0, 12, 24, 48]) {
+    offsets.add(zoneOffsetMinutes(zone, wall + hours * 3600000));
+  }
+  const candidates = [...offsets].map((offset) => {
+    const instant = wall - offset * 60000;
+    const actual = zoneParts(zone, instant);
+    const actualWall = Date.UTC(actual.year, actual.month, actual.day, actual.hour, actual.minute);
+    return { instant, delta: actualWall - wall };
+  });
+  const exact = candidates.filter((c) => c.delta === 0);
+  if (exact.length) {
+    // On a repeated hour, stay in the occurrence nearest the reference instant.
+    return exact.reduce((a, b) =>
+      Math.abs(a.instant - reference) <= Math.abs(b.instant - reference) ? a : b,
+    ).instant;
+  }
+  // In a skipped hour, move forward by the size of the clock change.
+  const after = candidates.filter((c) => c.delta > 0);
+  return (after.length ? after : candidates).reduce((a, b) =>
+    Math.abs(a.delta) <= Math.abs(b.delta) ? a : b,
+  ).instant;
+}
+
+const canonicalCache = new Map<string, string>();
 /** Resolve aliases such as Asia/Calcutta using the browser's time-zone database. */
 export function canonicalZone(zone: string): string {
-  return partsFormatter(zone).resolvedOptions().timeZone;
+  let canonical = canonicalCache.get(zone);
+  if (canonical === undefined) {
+    canonical = partsFormatter(zone).resolvedOptions().timeZone;
+    canonicalCache.set(zone, canonical);
+  }
+  return canonical;
 }
 
 /** The viewer's own wall clock, without a formatter. */
@@ -126,6 +161,13 @@ export function isValidZone(zone: string): boolean {
 
 export function pad2(n: number): string {
   return (n < 10 ? "0" : "") + n;
+}
+
+/** Minutes since midnight as HH:MM, wrapping a value outside the day. */
+export function formatMinutes(minutes: number | null): string {
+  if (minutes === null || !Number.isFinite(minutes)) return "—";
+  const m = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  return `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
 }
 
 export function formatTime(p: ZoneParts, hour24: boolean): string {
@@ -210,27 +252,38 @@ export interface ZoneOption {
   value: string;
   label: string;
   description: string;
+  /** The browser's own spelling, so saved cities and the catalog compare equal. */
+  canonical: string;
+  /** Other spellings of the same zone, searchable but never shown twice. */
+  aliases: string[];
 }
 
 let catalogCache: ZoneOption[] | null = null;
 
 export function zoneCatalog(): ZoneOption[] {
   if (catalogCache) return catalogCache;
-  const seen = new Set<string>();
-  const out: ZoneOption[] = [];
+  const byCanonical = new Map<string, ZoneOption>();
   const offer = (id: string, label: string) => {
-    if (seen.has(id)) return;
-    seen.add(id);
-    out.push({ value: id, label, description: id });
+    // Both sources are already valid zone IDs, so canonicalizing is enough.
+    const canonical = canonicalZone(id);
+    const found = byCanonical.get(canonical);
+    if (found) {
+      if (found.value !== id) found.aliases.push(id);
+      return;
+    }
+    byCanonical.set(canonical, { value: id, label, description: id, canonical, aliases: [] });
   };
 
   const supported = (
     Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
   ).supportedValuesOf?.("timeZone");
   const ids = supported && supported.length > 0 ? supported : CITIES.map((c) => c.id);
-  for (const id of ids) if (id.includes("/")) offer(id, labelForZone(id));
+  // Bundled names win; every browser spelling stays searchable as an alias.
   for (const c of CITIES) offer(c.id, c.label);
+  for (const id of ids) offer(id, labelForZone(id));
+  offer("UTC", "UTC");
 
+  const out = [...byCanonical.values()];
   out.sort((a, b) => a.label.localeCompare(b.label));
   catalogCache = out;
   return out;

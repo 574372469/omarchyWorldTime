@@ -26,6 +26,8 @@ export interface RowProps {
   city: City;
   index: number;
   now: number;
+  previewing: boolean;
+  onPreview: (zone: string, minutes: number) => void;
   localOffset: number;
   hour24: boolean;
   offsetMode: "home" | "utc";
@@ -60,6 +62,8 @@ export const CityRow = memo(function CityRow({
   city,
   index,
   now,
+  previewing,
+  onPreview,
   localOffset,
   hour24,
   offsetMode,
@@ -118,9 +122,9 @@ export const CityRow = memo(function CityRow({
   const sun = useMemo(
     () =>
       city.lat !== undefined && city.lon !== undefined
-        ? sunTimes(city.lat, city.lon, now, offset)
+        ? sunTimes(city.lat, city.lon, now, offset, city.id)
         : null,
-    [city.lat, city.lon, now, offset],
+    [city.id, city.lat, city.lon, now, offset],
   );
   const lit = sun ? litAt(sun, minutes) : minutes >= 6 * 60 && minutes < 18 * 60;
 
@@ -235,6 +239,7 @@ export const CityRow = memo(function CityRow({
             <span className="row-city">{name}</span>
             {home && <span className="row-home">{t(lang, "home")}</span>}
           </div>
+          <span className="row-zone" title={city.id}>{city.id}</span>
           <div className="row-meta-wrap">
             <div className="row-meta">
               <span className="row-date">{date}</span>
@@ -293,6 +298,9 @@ export const CityRow = memo(function CityRow({
           daylightMarker={daylightMarker}
           rounded={rounded}
           lang={lang}
+          city={name}
+          previewing={previewing}
+          onPreview={(value) => onPreview(city.id, value)}
         />
       </div>
 

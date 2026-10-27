@@ -120,12 +120,16 @@ jobs:
           - **Windows**: `.msi` or the `.exe` setup — the first launch installs the WebView2 runtime if the machine lacks it.
           - **macOS**: `.dmg`, universal (Apple silicon and Intel) — the build is unsigned, so on first open use right-click → Open, or allow it in System Settings → Privacy & Security.
           EOF
-          ls -lh assets
+          # The installers are named after the product, so their names contain a
+          # space ("World Clock_1.0.0_x64-setup.exe"); a plain assets/* would be
+          # split into several arguments.
+          mapfile -d '' files < <(find assets -type f -print0)
+          ls -lh "${files[@]}"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # A re-run of the same tag replaces the files instead of failing.
-            gh release upload "$TAG" assets/* --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" assets/* \
+            gh release create "$TAG" "${files[@]}" \
               --verify-tag \
               --title "World Clock $TAG" \
               --notes-file notes.md \

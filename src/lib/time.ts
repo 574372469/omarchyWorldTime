@@ -127,16 +127,34 @@ export function localParts(ms: number): ZoneParts {
   };
 }
 
-const abbrCache = new Map<string, Intl.DateTimeFormat>();
+const zoneNameCache = new Map<string, Intl.DateTimeFormat>();
+function zoneNameFormatter(
+  zone: string,
+  locale: string,
+  style: "short" | "longGeneric",
+): Intl.DateTimeFormat {
+  const key = `${locale}|${style}|${zone}`;
+  let f = zoneNameCache.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, { timeZone: zone, timeZoneName: style });
+    zoneNameCache.set(key, f);
+  }
+  return f;
+}
+
+/** The zone's name in `locale`: short ("EST") or generic long ("Japan Time"). */
+export function zoneName(zone: string, locale: string, style: "short" | "longGeneric"): string {
+  const part = zoneNameFormatter(zone, locale, style)
+    .formatToParts(new Date())
+    .find((p) => p.type === "timeZoneName");
+  return part ? part.value : "";
+}
+
 /** The zone's own short name: "EST", "JST", or "GMT+8" where it has none. */
 export function zoneAbbr(zone: string, ms: number, locale = "en-US"): string {
-  const key = `${locale}|${zone}`;
-  let f = abbrCache.get(key);
-  if (!f) {
-    f = new Intl.DateTimeFormat(locale, { timeZone: zone, timeZoneName: "short" });
-    abbrCache.set(key, f);
-  }
-  const part = f.formatToParts(new Date(ms)).find((p) => p.type === "timeZoneName");
+  const part = zoneNameFormatter(zone, locale, "short")
+    .formatToParts(new Date(ms))
+    .find((p) => p.type === "timeZoneName");
   return part ? part.value : "";
 }
 

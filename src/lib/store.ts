@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { findCity, isValidZone, type City } from "./time";
+import { canonicalZone, findCity, isValidZone, type City } from "./time";
 
 const KEY = "omarchy-world-clock:v1";
 
@@ -36,10 +36,12 @@ export function loadSettings(seed: City[]): Settings {
     : seed;
   // Keep the actual local zone first, even after travelling or loading an old order.
   const cities = seed.slice(0, 1);
-  const seen = new Set(cities.map((c) => c.id));
+  // Older saves may hold two spellings of one zone; the browser knows which.
+  const seen = new Set(cities.map((c) => canonicalZone(c.id)));
   for (const city of saved) {
-    if (seen.has(city.id)) continue;
-    seen.add(city.id);
+    const canonical = canonicalZone(city.id);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
     const known = findCity(city.id);
     cities.push(known ? { ...known, label: city.label } : { id: city.id, label: city.label });
   }

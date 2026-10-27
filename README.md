@@ -20,7 +20,7 @@ I recently started using Omarchy Linux and was impressed by its design sensibili
 | Daylight strip | Shows sunrise, sunset, and the moon phase. Drag or use the arrow keys to preview a time across all cities and the globe; select the preview button to return to live time. |
 | Greetings | Shows Elsewhen's time-of-day greetings, with romanization where available. |
 | Globe | Rotatable globe with a day/night line and selectable city labels. Page pinch zoom remains available outside the draggable globe and reorder grips. |
-| Search | Browse all time zones supported by your browser, or search by city or zone identifier. |
+| Search | Browse all time zones supported by your browser. Each option shows the zone's name in your language and in its own, and either spelling finds it; zones already on the clock are left out. |
 | Reordering and touch | Reorder cities with the explicit grip. The list remains scrollable by touch, and draggable controls do not select text. |
 | Language | Follows the browser's detected language by default, with a manual choice of English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German, Spanish, Portuguese, Russian, Italian, or Dutch. |
 | Themes | Choose from 23 Omarchy themes, including light themes, and optionally enable rounded corners. |

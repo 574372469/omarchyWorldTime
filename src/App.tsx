@@ -9,6 +9,7 @@ import { localeOf, resolveLang, t } from "./lib/i18n";
 import { useMediaQuery, useNow, usePersistentSettings } from "./lib/store";
 import { themeById } from "./lib/themes";
 import {
+  canonicalZone,
   findCity,
   formatTime,
   instantAtWallMinute,
@@ -165,7 +166,10 @@ export default function App() {
     update({ offsetMode: settings.offsetMode === "utc" ? "home" : "utc" });
 
   const addCity = (zone: string, label: string) => {
-    if (settings.cities.some((c) => c.id === zone)) return;
+    // The zone, not its spelling, is a city's identity: Asia/Calcutta and
+    // Asia/Kolkata are one place, and only one of them may be in the list.
+    const canonical = canonicalZone(zone);
+    if (settings.cities.some((c) => canonicalZone(c.id) === canonical)) return;
     update({ cities: [...settings.cities, { ...findCity(zone), id: zone, label }] });
   };
 
@@ -372,6 +376,7 @@ export default function App() {
         accent={theme.accent}
         rounded={rounded}
         lang={lang}
+        locale={locale}
         onPick={addCity}
         onClose={() => undefined}
       />

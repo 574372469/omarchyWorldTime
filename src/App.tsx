@@ -4,6 +4,8 @@ import { CitySearch } from "./components/CitySearch";
 import { Globe, type GlobeCity } from "./components/Globe";
 import { HeroGlobe } from "./components/HeroGlobe";
 import { ThemePicker } from "./components/ThemePicker";
+import { localizedCity } from "./lib/cityNames";
+import { localeOf, resolveLang, t } from "./lib/i18n";
 import { useMediaQuery, useNow, usePersistentSettings } from "./lib/store";
 import { themeById } from "./lib/themes";
 import {
@@ -22,6 +24,53 @@ import { useTheme } from "./lib/useTheme";
 
 const OPEN_SPIN_MS = 1250;
 
+/** Elsewhen's list-to-globe flight, at the speeds its panel uses. */
+const OPEN_ZOOM_MS = 800;
+const CLOSE_ZOOM_MS = 500;
+const KNOCK_STAGGER = 0.09;
+const KNOCK_MAX_LEAD = 0.5;
+const KNOCK_THROW_X = 95;
+const KNOCK_TILT = 14;
+const KNOCK_SHRINK = 0.18;
+
+/** How far into the knock row `index` is, 0..1, its lead capped as Elsewhen does. */
+function knockAt(index: number, zoom: number): number {
+  const lead = Math.min(KNOCK_MAX_LEAD, index * KNOCK_STAGGER);
+  return Math.max(0, Math.min(1, (zoom - lead) / (1 - lead)));
+}
+
+/** Runs 0↔1 with Elsewhen's curves: out-quart in, in-out-cubic back. */
+function useZoom(target: number, reducedMotion: boolean): number {
+  const [zoom, setZoom] = useState(target);
+  const from = useRef(target);
+  const anim = useRef<number | null>(null);
+  useEffect(() => {
+    if (reducedMotion || from.current === target) {
+      from.current = target;
+      setZoom(target);
+      return;
+    }
+    if (anim.current) cancelAnimationFrame(anim.current);
+    const start = from.current;
+    const dur = target > start ? OPEN_ZOOM_MS : CLOSE_ZOOM_MS;
+    const goingIn = target > start;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const e = goingIn ? 1 - Math.pow(1 - k, 4) : k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      const v = start + (target - start) * e;
+      from.current = v;
+      setZoom(v);
+      anim.current = k < 1 ? requestAnimationFrame(step) : null;
+    };
+    anim.current = requestAnimationFrame(step);
+    return () => {
+      if (anim.current) cancelAnimationFrame(anim.current);
+    };
+  }, [target, reducedMotion]);
+  return zoom;
+}
+
 /** A zone's coordinates: the bundled city's, else its standard meridian. */
 function coordsFor(zone: string): { lat: number; lon: number } {
   const c = findCity(zone);
@@ -35,11 +84,12 @@ export default function App() {
   const [settings, update] = usePersistentSettings(seed);
   const now = useNow();
 
-  // Omarchy's shell speaks English whatever the system locale, so the dates
-  // here do too; only the 12/24-hour convention follows the locale.
-  const locale = "en-US";
+  // The panel speaks the browser's language unless one is chosen; the
+  // 12/24-hour convention follows the same tag.
+  const lang = useMemo(() => resolveLang(settings.lang), [settings.lang]);
+  const locale = localeOf(lang, settings.lang);
   const theme = useMemo(() => themeById(settings.theme), [settings.theme]);
-  const hour24 = settings.hour24 ?? usesTwentyFourHour(navigator.language || "en-US");
+  const hour24 = settings.hour24 ?? usesTwentyFourHour(locale);
   const rounded = settings.rounded;
   useTheme(theme, rounded);
 
@@ -56,8 +106,18 @@ export default function App() {
   const [globeCity, setGlobeCity] = useState<GlobeCity | null>(null);
   // On a wide screen the globe is always there, so it is never "closed".
   const globeOn = globeMode || wide;
+  // One number drives Elsewhen's list-to-globe flight: 0 the list, 1 the globe.
+  const zoom = useZoom(globeOn ? 1 : 0, reducedMotion);
 
-  const focusZone = picked ?? settings.cities[0]?.id ?? here;
+  // Whatever zone the viewer is actually in, pinned to the top of the list.
+  // It may not be one of Omarchy's bundled cities — the row is then built
+  // from the zone id, and its coordinates come from the standard meridian.
+  const homeZone = settings.cities[0]?.id ?? here;
+  const homeLabel =
+    settings.cities[0]?.label ??
+    (findCity(here)?.label ?? labelForZone(here));
+
+  const focusZone = picked ?? homeZone;
   const focus = useMemo(() => coordsFor(focusZone), [focusZone]);
 
   // ---- the hero globe: an opening spin, then a turn to whatever is picked
@@ -100,10 +160,12 @@ export default function App() {
 
   const addCity = (zone: string, label: string) => {
     if (settings.cities.some((c) => c.id === zone)) return;
-    update({ cities: [...settings.cities, { id: zone, label }] });
+    update({ cities: [...settings.cities, { ...findCity(zone), id: zone, label }] });
   };
 
+  // The first row is where the viewer is; it stays, and it stays on top.
   const removeCity = (zone: string) => {
+    if (settings.cities[0]?.id === zone) return;
     if (settings.cities.length <= 1) return;
     update({ cities: settings.cities.filter((c) => c.id !== zone) });
     if (picked === zone) setPicked(null);
@@ -124,6 +186,9 @@ export default function App() {
 
   const rowEls = useRef<(HTMLElement | null)[]>([]);
   const dragStartY = useRef(0);
+  // The list gains a hairline under the home row only once it has stuck.
+  const listRef = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
   const registerRow = useCallback((i: number, el: HTMLElement | null) => {
     rowEls.current[i] = el;
   }, []);
@@ -134,6 +199,8 @@ export default function App() {
   };
 
   const beginDrag = (index: number, clientY: number) => {
+    // The home row is fixed to the top; nothing drags past it.
+    if (index === 0) return;
     dragStartY.current = clientY;
     const pitches = citiesRef.current.map(
       (_, i) => (rowEls.current[i]?.offsetHeight ?? 60) + 14,
@@ -161,18 +228,29 @@ export default function App() {
     const raw = dir * passed;
     const held = d.target - d.index;
     const next = Math.abs(raw - held) >= 0.6 ? Math.round(raw) : held;
-    const target = Math.max(0, Math.min(count - 1, d.index + next));
+    // Slot 0 is the home row's; a dragged row stops at slot 1.
+    const target = Math.max(1, Math.min(count - 1, d.index + next));
     applyDrag({ ...d, offset, target });
   };
 
-  const endDrag = () => {
+  const endDrag = (cancelled = false) => {
     const d = dragRef.current;
     applyDrag(null);
-    if (!d || d.index === d.target) return;
+    if (cancelled || !d || d.index === d.target) return;
+    moveCity(d.index, d.target);
+  };
+
+  const moveCity = (from: number, to: number) => {
     const next = citiesRef.current.slice();
-    const [moved] = next.splice(d.index, 1);
-    next.splice(d.target, 0, moved);
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     update({ cities: next });
+  };
+
+  const reorderCity = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (index === 0 || target < 1 || target >= settings.cities.length) return;
+    moveCity(index, target);
   };
 
   const rowShift = (index: number) => {
@@ -182,6 +260,16 @@ export default function App() {
     if (drag.index > drag.target && index >= drag.target && index < drag.index) return pitch;
     return 0;
   };
+
+  // ---- the home row's shadow
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const onScroll = () => setStuck(el.scrollTop > 2);
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [settings.cities.length, wide]);
 
   // ---- keyboard
   useEffect(() => {
@@ -199,47 +287,74 @@ export default function App() {
   });
 
   // Elsewhen's own caption: "It's 22:51 here in Singapore".
-  const homeLabel = settings.cities[0]?.label ?? labelForZone(here);
-  const hereLine = `It's ${formatTime(local, hour24)} here in ${homeLabel}`;
+  const hereName = localizedCity(homeZone, lang) || homeLabel;
+  const hereLine = t(lang, "hereTime", {
+    time: formatTime(local, hour24),
+    city: hereName,
+  });
 
   const list = (
     <div className="list">
-      {settings.cities.map((city: City, i) => (
-        <CityRow
-          key={city.id}
-          city={city}
-          index={i}
-          now={now}
-          localOffset={localOffset}
-          hour24={hour24}
-          offsetMode={settings.offsetMode}
-          locale={locale}
-          picked={picked === city.id}
-          dragging={drag?.index === i}
-          dragOffset={drag?.index === i ? drag.offset : 0}
-          shift={rowShift(i)}
-          bg={theme.background}
-          fg={theme.foreground}
-          accent={theme.accent}
-          daylightMarker="#E5C736"
-          rounded={rounded}
-          compact={!medium}
-          onPick={() => pickCity(city.id)}
-          onToggleHour24={toggleHour24}
-          onToggleOffset={toggleOffset}
-          onRemove={settings.cities.length > 1 ? () => removeCity(city.id) : undefined}
-          onDragStart={beginDrag}
-          onDragMove={moveDrag}
-          onDragEnd={endDrag}
-          registerRow={registerRow}
-        />
-      ))}
+      {settings.cities.map((city: City, i) => {
+        // Elsewhen knocks the rows aside as the globe zooms in: each row
+        // leaves a beat after the one above it, throws out to its own side,
+        // tilts, and shrinks as it falls.
+        const k = wide ? 0 : knockAt(i, zoom);
+        const side = i % 2 === 0 ? -1 : 1;
+        const knockX = k * side * KNOCK_THROW_X;
+        const knockY = k * k * 900;
+        return (
+          <div
+            key={city.id}
+            className={`row-slot${i === 0 ? " is-home" : ""}`}
+            style={{
+              transform: k > 0
+                ? `translate(${knockX}px, ${knockY}px) rotate(${k * side * KNOCK_TILT}deg) scale(${1 - KNOCK_SHRINK * k})`
+                : undefined,
+              opacity: k > 0 ? 1 - k : 1,
+              pointerEvents: k > 0.02 ? "none" : undefined,
+            }}
+            aria-hidden={globeMode && !wide}
+          >
+            <CityRow
+              city={city}
+              index={i}
+              now={now}
+              localOffset={localOffset}
+              hour24={hour24}
+              offsetMode={settings.offsetMode}
+              locale={locale}
+              lang={lang}
+              picked={picked === city.id}
+              dragging={drag?.index === i}
+              dragOffset={drag?.index === i ? drag.offset : 0}
+              shift={rowShift(i)}
+              bg={theme.background}
+              fg={theme.foreground}
+              accent={theme.accent}
+              daylightMarker="#E5C736"
+              rounded={rounded}
+              compact={!medium}
+              home={i === 0}
+              onPick={() => pickCity(city.id)}
+              onToggleHour24={toggleHour24}
+              onToggleOffset={toggleOffset}
+              onRemove={i === 0 ? undefined : () => removeCity(city.id)}
+              onDragStart={beginDrag}
+              onDragMove={moveDrag}
+              onDragEnd={endDrag}
+              onReorder={reorderCity}
+              registerRow={registerRow}
+            />
+          </div>
+        );
+      })}
       <CitySearch
         existing={settings.cities}
-        placeholder="Add a city"
         fg={theme.foreground}
         accent={theme.accent}
         rounded={rounded}
+        lang={lang}
         onPick={addCity}
         onClose={() => undefined}
       />
@@ -264,22 +379,31 @@ export default function App() {
               markerShown
               markerLat={focus.lat}
               markerLon={focus.lon}
-              zoom={globeOn ? 1 : 0}
+              zoom={zoom}
               onClick={() => (wide ? setPicked(null) : setGlobeMode((v) => !v))}
             />
             <span className="hero-word">Clock</span>
           </div>
         </header>
 
-        <div className="stage" data-globe={globeMode}>
-          <div className="stage-list" aria-hidden={globeMode && !wide}>
+        <div
+          className="stage"
+          data-globe={globeMode}
+          style={{ ["--zoom" as string]: zoom }}
+        >
+          <div
+            ref={listRef}
+            className="stage-list"
+            data-stuck={stuck}
+            aria-hidden={globeMode && !wide}
+          >
             {list}
           </div>
           <div className="stage-globe" aria-hidden={!globeOn}>
             <Globe
               now={now}
               tracked={settings.cities}
-              homeZone={here}
+              homeZone={homeZone}
               hour24={hour24}
               bg={theme.background}
               fg={theme.foreground}
@@ -288,9 +412,10 @@ export default function App() {
               focusLon={focus.lon}
               focusLat={focus.lat}
               focusShown={!!picked || !!globeCity}
-              zoom={globeOn ? 1 : 0}
-              active={globeOn}
+              zoom={zoom}
+              active={globeOn || zoom > 0}
               reducedMotion={reducedMotion}
+              lang={lang}
               onSelect={(c) => setGlobeCity(c)}
               onExit={() => setGlobeMode(false)}
             />
@@ -302,7 +427,7 @@ export default function App() {
             type="button"
             className="bar-button"
             onClick={toggleHour24}
-            title="Toggle 12/24-hour time (T)"
+            title={t(lang, hour24 ? "hour24Title" : "hour12Title")}
           >
             {hour24 ? "24h" : "12h"}
           </button>
@@ -310,19 +435,30 @@ export default function App() {
             type="button"
             className="bar-button"
             onClick={toggleOffset}
-            title="Row offsets: distance from here, or the zone's own UTC offset"
+            title={t(lang, settings.offsetMode === "utc" ? "offsetTitleUtc" : "offsetTitleHome")}
           >
-            {settings.offsetMode === "utc" ? "UTC" : "from here"}
+            {settings.offsetMode === "utc" ? t(lang, "utcMode") : t(lang, "fromHere")}
           </button>
           <span className="bar-spacer" />
-          <span className="bar-count">
-            {settings.cities.length} of {CITIES.length}
-          </span>
+          <span className="bar-count">{t(lang, "count", { n: settings.cities.length, total: CITIES.length })}</span>
+          <a
+            className="bar-button github-link"
+            href="https://github.com/574372469/omarchyWorldTime"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub"
+            title="GitHub"
+          >
+            GitHub <span aria-hidden="true">↗</span>
+          </a>
           <ThemePicker
             theme={theme}
             rounded={rounded}
+            lang={lang}
+            langChoice={settings.lang}
             onTheme={(id) => update({ theme: id })}
             onRounded={(v) => update({ rounded: v })}
+            onLang={(choice) => update({ lang: choice })}
           />
         </footer>
       </main>

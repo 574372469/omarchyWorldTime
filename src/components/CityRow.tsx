@@ -1,6 +1,8 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { alpha, darken, mix } from "../lib/color";
+import { localizedCity } from "../lib/cityNames";
 import { greeting } from "../lib/greetings";
+import { t, type Lang } from "../lib/i18n";
 import { litAt, sunTimes } from "../lib/solar";
 import { DaylightStrip } from "./DaylightStrip";
 import {
@@ -8,6 +10,7 @@ import {
   dayDelta,
   formatDate,
   formatTime,
+  isNumericAbbr,
   localParts,
   meridiem,
   phaseFor,
@@ -27,6 +30,7 @@ export interface RowProps {
   hour24: boolean;
   offsetMode: "home" | "utc";
   locale: string;
+  lang: Lang;
   picked: boolean;
   dragging: boolean;
   dragOffset: number;
@@ -37,13 +41,16 @@ export interface RowProps {
   daylightMarker: string;
   rounded: boolean;
   compact: boolean;
+  /** The viewer's own row: pinned first, and it cannot be removed. */
+  home: boolean;
   onPick: () => void;
   onToggleHour24: () => void;
   onToggleOffset: () => void;
   onRemove?: () => void;
   onDragStart: (index: number, clientY: number) => void;
   onDragMove: (clientY: number) => void;
-  onDragEnd: () => void;
+  onDragEnd: (cancelled?: boolean) => void;
+  onReorder: (index: number, direction: -1 | 1) => void;
   registerRow: (index: number, el: HTMLElement | null) => void;
 }
 
@@ -57,6 +64,7 @@ export const CityRow = memo(function CityRow({
   hour24,
   offsetMode,
   locale,
+  lang,
   picked,
   dragging,
   dragOffset,
@@ -67,6 +75,7 @@ export const CityRow = memo(function CityRow({
   daylightMarker,
   rounded,
   compact,
+  home,
   onPick,
   onToggleHour24,
   onToggleOffset,
@@ -74,21 +83,31 @@ export const CityRow = memo(function CityRow({
   onDragStart,
   onDragMove,
   onDragEnd,
+  onReorder,
   registerRow,
 }: RowProps) {
+  const stopPointer = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopPointer.current?.(), []);
+
   const dim = darken(fg, 1.55);
   const fainter = darken(fg, 2.1);
 
   const offset = useMemo(() => zoneOffsetMinutes(city.id, now), [city.id, now]);
   const parts = useMemo(() => zoneParts(city.id, now), [city.id, now]);
   const local = useMemo(() => localParts(now), [now]);
-  const day = dayLabel(dayDelta(parts, local));
+  const day = dayLabel(dayDelta(parts, local), lang);
   const date = formatDate(city.id, now, locale);
   const phase = phaseFor(parts.hour);
   const greet = greeting(city.id, parts.hour);
-  const abbr = zoneAbbr(city.id, now);
+  // "GMT+8" is only the offset wearing another name, so it is written the way
+  // the rest of the panel writes offsets: UTC+8. Real abbreviations (EST, JST)
+  // stay as they are.
+  const rawAbbr = zoneAbbr(city.id, now, locale);
+  const abbr = isNumericAbbr(rawAbbr) ? utcOffsetLabel(offset) : rawAbbr;
   const rel = relativeOffsetLabel(offset, localOffset);
-  const offsetText = offsetMode === "utc" ? utcOffsetLabel(offset) : rel;
+  const absolute = utcOffsetLabel(offset);
+  const offsetText = offsetMode === "utc" ? (abbr === absolute ? "" : absolute) : rel;
+  const name = localizedCity(city.id, lang) || city.label;
 
   const fill = picked ? PHASE_FILL.day + 0.05 : PHASE_FILL[phase];
   const background = mix(bg, fg, fill);
@@ -108,7 +127,9 @@ export const CityRow = memo(function CityRow({
   return (
     <div
       ref={(el) => registerRow(index, el)}
-      className={`row${picked ? " is-picked" : ""}${dragging ? " is-dragging" : ""}`}
+      className={`row${picked ? " is-picked" : ""}${dragging ? " is-dragging" : ""}${
+        home ? " is-home" : ""
+      }`}
       style={{
         background,
         borderRadius: rounded ? 6 : 0,
@@ -123,43 +144,97 @@ export const CityRow = memo(function CityRow({
       role="button"
       tabIndex={0}
       aria-pressed={picked}
-      aria-label={`${city.label}, ${formatTime(parts, hour24)} ${hour24 ? "" : meridiem(parts)}`}
+      aria-label={`${name}, ${formatTime(parts, hour24)} ${hour24 ? "" : meridiem(parts)}`}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onPick();
         }
       }}
+      onDragStart={(e) => e.preventDefault()}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
-        if (e.button !== 0 && e.pointerType === "mouse") return;
+        if (!e.isPrimary || e.button !== 0) return;
         const target = e.target as HTMLElement;
-        if (target.closest("button")) return;
+        const handle = target.closest(".row-grip");
+        if (target.closest("button") && !handle) return;
+        stopPointer.current?.();
+        const row = e.currentTarget;
+        const startX = e.clientX;
         const startY = e.clientY;
+        const pointerId = e.pointerId;
+        const canDrag = !home && (e.pointerType === "mouse" || !!handle);
         let armed = false;
+        let moved = false;
+        if (canDrag) row.setPointerCapture(pointerId);
+        const cleanup = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", cancel);
+          window.removeEventListener("blur", blur);
+          if (row.hasPointerCapture(pointerId)) row.releasePointerCapture(pointerId);
+          stopPointer.current = null;
+        };
         const move = (ev: PointerEvent) => {
-          const dy = ev.clientY - startY;
+          if (ev.pointerId !== pointerId) return;
+          if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+          moved = true;
+          if (!canDrag) return;
+          if (ev.cancelable) ev.preventDefault();
           if (!armed) {
-            if (Math.abs(dy) < 4) return;
             armed = true;
             onDragStart(index, startY);
           }
           onDragMove(ev.clientY);
         };
-        const up = () => {
-          window.removeEventListener("pointermove", move);
-          window.removeEventListener("pointerup", up);
-          window.removeEventListener("pointercancel", up);
+        const up = (ev: PointerEvent) => {
+          if (ev.pointerId !== pointerId) return;
+          cleanup();
           if (armed) onDragEnd();
-          else onPick();
+          else if (!moved && !handle) onPick();
         };
-        window.addEventListener("pointermove", move);
+        const cancel = (ev: PointerEvent) => {
+          if (ev.pointerId !== pointerId) return;
+          cleanup();
+          if (armed) onDragEnd(true);
+        };
+        const blur = () => {
+          cleanup();
+          if (armed) onDragEnd(true);
+        };
+        stopPointer.current = cleanup;
+        window.addEventListener("pointermove", move, { passive: false });
         window.addEventListener("pointerup", up);
-        window.addEventListener("pointercancel", up);
+        window.addEventListener("pointercancel", cancel);
+        window.addEventListener("blur", blur);
       }}
     >
+      {!home && (
+        <button
+          type="button"
+          className="row-grip"
+          aria-label={t(lang, "reorderCity", { city: name })}
+          title={t(lang, "reorderCity", { city: name })}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault();
+              e.stopPropagation();
+              onReorder(index, e.key === "ArrowUp" ? -1 : 1);
+            }
+          }}
+        >
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true">
+            {[3, 7, 11].flatMap((y) => [2, 6].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1" />))}
+          </svg>
+        </button>
+      )}
       <div className="row-main">
         <div className="row-labels">
-          <div className="row-name">{city.label}</div>
+          <div className="row-name">
+            <span className="row-city">{name}</span>
+            {home && <span className="row-home">{t(lang, "home")}</span>}
+          </div>
           <div className="row-meta-wrap">
             <div className="row-meta">
               <span className="row-date">{date}</span>
@@ -187,7 +262,7 @@ export const CityRow = memo(function CityRow({
               e.stopPropagation();
               onToggleHour24();
             }}
-            title={hour24 ? "Switch to 12-hour time" : "Switch to 24-hour time"}
+            title={t(lang, hour24 ? "hour24Title" : "hour12Title")}
           >
             <span className="row-clock">{formatTime(parts, hour24)}</span>
             {!hour24 && <span className="row-meridiem">{meridiem(parts)}</span>}
@@ -199,9 +274,7 @@ export const CityRow = memo(function CityRow({
               e.stopPropagation();
               onToggleOffset();
             }}
-            title={
-              offsetMode === "home" ? "Show the zone's own offset" : "Show the distance from here"
-            }
+            title={t(lang, offsetMode === "home" ? "offsetTitleHome" : "offsetTitleUtc")}
           >
             <span className="row-abbr">{abbr}</span>
             {offsetText ? <span className="row-rel">{offsetText}</span> : null}
@@ -219,6 +292,7 @@ export const CityRow = memo(function CityRow({
           fainter={fainter}
           daylightMarker={daylightMarker}
           rounded={rounded}
+          lang={lang}
         />
       </div>
 
@@ -226,8 +300,8 @@ export const CityRow = memo(function CityRow({
         <button
           type="button"
           className="row-remove"
-          aria-label={`Remove ${city.label}`}
-          title={`Remove ${city.label}`}
+          aria-label={t(lang, "removeCity", { city: name })}
+          title={t(lang, "removeCity", { city: name })}
           onClick={(e) => {
             e.stopPropagation();
             onRemove();

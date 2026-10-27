@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { alpha, mix } from "../lib/color";
+import { localizedCity } from "../lib/cityNames";
+import { t, type Lang } from "../lib/i18n";
 import world from "../data/world.json";
 import {
   AXIAL_TILT,
@@ -15,10 +17,12 @@ import {
   terminator,
   visibleSegments,
 } from "../lib/solar";
-import { CITIES, formatTime, utcOffsetLabel, zoneOffsetMinutes, zoneParts, type City } from "../lib/time";
+import { CITIES, canonicalZone, formatTime, utcOffsetLabel, zoneOffsetMinutes, zoneParts, type City } from "../lib/time";
 
 export interface GlobeCity {
   label: string;
+  /** The name drawn on the globe and in the footer, in the panel's language. */
+  name: string;
   zone: string;
   lat: number;
   lon: number;
@@ -44,6 +48,7 @@ interface Props {
   /** Skip painting while the globe is behind the list. */
   active: boolean;
   reducedMotion: boolean;
+  lang: Lang;
   onSelect: (city: GlobeCity | null) => void;
   onExit: () => void;
 }
@@ -67,6 +72,7 @@ export function Globe({
   zoom,
   active,
   reducedMotion,
+  lang,
   onSelect,
   onExit,
 }: Props) {
@@ -85,23 +91,22 @@ export function Globe({
   const sub = useMemo(() => subsolarPoint(now), [now]);
   const phase = useMemo(() => moonPhase(now), [now]);
 
-  const trackedNames = useMemo(
-    () => new Set(tracked.map((c) => c.label.toLowerCase())),
+  const trackedZones = useMemo(
+    () => new Set(tracked.map((c) => canonicalZone(c.id))),
     [tracked],
   );
-  const homeName = useMemo(() => {
-    const c = CITIES.find((x) => x.id === homeZone);
-    return (c ? c.label : homeZone.split("/").pop() || "").toLowerCase();
-  }, [homeZone]);
+  const homeId = useMemo(() => canonicalZone(homeZone), [homeZone]);
 
   const cities = useMemo<GlobeCity[]>(() => {
     const byKey = new Map<string, GlobeCity>();
     for (const c of CITIES) {
-      const isTracked = trackedNames.has(c.label.toLowerCase());
-      const isHome = c.label.toLowerCase() === homeName;
+      const id = canonicalZone(c.id);
+      const isTracked = trackedZones.has(id);
+      const isHome = id === homeId;
       if (!isTracked && !isHome) continue;
       byKey.set(`${c.label}|${c.id}`, {
         label: c.label,
+        name: localizedCity(c.id, lang) || c.label,
         zone: c.id,
         lat: c.lat ?? 0,
         lon: c.lon ?? 0,
@@ -111,7 +116,7 @@ export function Globe({
       });
     }
     return [...byKey.values()];
-  }, [trackedNames, homeName]);
+  }, [trackedZones, homeId, lang]);
 
   // ---- resize
   useEffect(() => {
@@ -326,7 +331,7 @@ export function Globe({
             .filter((x) => x.p.cosc >= 0.12)
             .map((x) => ({
               index: kept.indexOf(x),
-              name: x.c.label,
+              name: x.c.name,
               x: x.p.x,
               y: x.p.y,
               rank: x.c.home || x.c.tracked ? 0 : x.c.rank,
@@ -339,13 +344,16 @@ export function Globe({
           6,
         );
 
+    // The canvas picks up whatever text font the panel is set in, so a CJK
+    // label is drawn in the browser's own CJK face rather than tofu.
+    const labelFont = getComputedStyle(canvas).fontFamily || "monospace";
     const paintLabels = (color: string) => {
-      ctx.font = "500 10px 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace";
+      ctx.font = `500 10px ${labelFont}`;
       ctx.textBaseline = "middle";
       ctx.fillStyle = color;
       for (const l of labels) {
         const item = kept[l.index];
-        ctx.fillText(item.c.label, l.box.x, l.box.y + l.box.h / 2);
+        ctx.fillText(item.c.name, l.box.x, l.box.y + l.box.h / 2);
       }
     };
     paintLabels(ink(0.95));
@@ -469,7 +477,7 @@ export function Globe({
         onPointerCancel={() => setDragging(false)}
       />
 
-      <div className="globe-chrome" style={{ opacity: chrome, pointerEvents: chrome > 0.5 ? "auto" : "none" }}>
+      <div className="globe-chrome" style={{ opacity: chrome }}>
         {selCity && (
           <div className="globe-footer">
             <div className="globe-footer-line">
@@ -477,12 +485,14 @@ export function Globe({
                 className="globe-dot"
                 style={{ background: selDaylight ? TRACKED_COLOR : "transparent" }}
               />
-              <span className="globe-name">{selCity.label}</span>
+              <span className="globe-name">{selCity.name}</span>
               <span className="globe-clock">
                 {formatTime(zoneParts(selCity.zone, now), hour24)}
               </span>
-              {selCity.home && <span className="globe-badge">home</span>}
-              {!selCity.home && selCity.tracked && <span className="globe-badge">tracked</span>}
+              {selCity.home && <span className="globe-badge">{t(lang, "home")}</span>}
+              {!selCity.home && selCity.tracked && (
+                <span className="globe-badge">{t(lang, "tracked")}</span>
+              )}
             </div>
             <div className="globe-footer-line is-dim">
               <span>{selCity.zone}</span>
@@ -492,16 +502,21 @@ export function Globe({
         )}
         {!selCity && (
           <div className="globe-hint">
-            <span>Drag to spin</span>
+            <span>{t(lang, "dragToSpin")}</span>
             <span className="globe-hint-sep">·</span>
-            <span>Tap a city</span>
+            <span>{t(lang, "tapCity")}</span>
           </div>
         )}
-        <button type="button" className="globe-exit" onClick={onExit} aria-label="Back to the list">
+        <button
+          type="button"
+          className="globe-exit"
+          onClick={onExit}
+          aria-label={t(lang, "backToList")}
+        >
           <span aria-hidden="true">×</span>
-          <span className="globe-exit-label">List</span>
+          <span className="globe-exit-label">{t(lang, "listLabel")}</span>
         </button>
-        <span className="globe-phase" title="Moon phase" aria-label="Moon phase">
+        <span className="globe-phase" title={t(lang, "moonPhase")} aria-label={t(lang, "moonPhase")}>
           <MoonBadge phase={phase} color={fg} />
         </span>
       </div>

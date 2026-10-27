@@ -1,100 +1,97 @@
-# World Clock — an Omarchy Elsewhen for the web
+# World Clock
 
-把 [Omarchy](https://github.com/omacom/omarchy) 4.0 "Quattro" 桌面里的世界时钟面板
-**Elsewhen**（`omarchy.elsewhen`）复刻成一个纯前端 Web 应用：一座城市一行，
-每行带 24 小时日照条，右上角可以点开一颗可旋转的地球。
+**English** | [简体中文](README.zh-CN.md)
 
-- 参考仓库：<https://github.com/omacom/omarchy>
-- 参考源码：`shell/plugins/panels/elsewhen/`（见 [docs/omarchy-reference.md](docs/omarchy-reference.md)）
-- 部署目标：Cloudflare（静态资源，无后端、无 API 调用）
-- 技术栈：Vite + React + TypeScript，时区计算全部走 `Intl.DateTimeFormat`
+A web recreation of **Elsewhen**, the world-clock panel built into [Omarchy](https://github.com/omacom/omarchy). Each city gets a row with its local time and a 24-hour daylight strip, alongside a rotatable globe.
 
-## 功能
+- Reference project: [Omarchy](https://github.com/omacom/omarchy), especially `shell/plugins/panels/elsewhen/`. See [the reference notes](docs/omarchy-reference.md).
+- Stack: Vite, React, and TypeScript. Time-zone calculations use `Intl.DateTimeFormat`.
+- Hosting: Cloudflare Pages or Cloudflare Workers static assets. The app is a static frontend with no backend or API calls.
 
-| | |
+## Why I made this
+
+I recently started using Omarchy Linux and was impressed by its design sensibility. I happened to discover its built-in Elsewhen world clock. It seemed especially useful for people in international trade and anyone who works or communicates across time zones. I recreated it for the web so people who don't use Omarchy can try similar functionality and get a feel for it. I chose the web because there is no app-store review wait or download: just open it and use it. I hope you like it.
+
+## Features
+
+| Feature | Details |
 |---|---|
-| 23 套 Omarchy 主题 | 直接取自 `themes/<id>/colors.toml`，含 catppuccin-latte / white 等亮色主题 |
-| 城市行 | 当地时间、日期、跨日标记（Tomorrow / Yesterday / +N days）、时区缩写、相对偏移 |
-| 24 小时日照条 | 按该城市经纬度算出的日出日落点亮，金色圆点是"现在"，夜间显示月相 |
-| 问候语 | 悬停行时日期换成 Elsewhen 的问候（含罗马数字与原文语言），取自 `Greetings.js` |
-| 地球 | 正射投影、晨昏线、可拖动甩动、点击城市定位，标签按海陆自动反色 |
-| 搜索添加 | `Intl.supportedValuesOf("timeZone")` 全量时区，中英文名均可搜 |
-| 拖动排序 | 长按行拖动改顺序，结果存 localStorage |
-| 响应式 | 手机全屏面板 / 折叠屏横向滚动 / iPad 浮层卡片 / 桌面双栏 |
+| City list | Shows local time and date, day differences, time-zone abbreviations, and offsets. Fresh defaults are your local time zone, New York (US), London (UK), Dubai (UAE), and Sydney (Australia); duplicate zones are omitted when your local zone matches one of them. Existing customized city lists are kept. The local row stays pinned at the top and cannot be removed. |
+| Daylight strip | Shows sunrise and sunset for each city's location, the current-time marker, and the moon phase at night. |
+| Greetings | Shows Elsewhen's time-of-day greetings, with romanization where available. |
+| Globe | Rotatable globe with a day/night line and selectable city labels. Page pinch zoom remains available outside the draggable globe and reorder grips. |
+| Search | Add cities by searching time zones and city names. |
+| Reordering and touch | Reorder cities with the explicit grip. The list remains scrollable by touch, and draggable controls do not select text. |
+| Language | Follows the browser's detected language by default, with a manual choice of English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, German, Spanish, Portuguese, Russian, Italian, or Dutch. |
+| Themes | Choose from 23 Omarchy themes, including light themes, and optionally enable rounded corners. |
+| Preferences | Your city list, theme, language, and clock settings are saved in browser local storage. |
+| Layout | Responsive layouts for phones, tablets, and desktop screens. |
 
-快捷键：`T` 切换 12/24 小时，`G` 切换地球，`Esc` 逐层退出。
+Keyboard shortcuts: `T` switches between 12- and 24-hour time, `G` toggles the globe, and `Esc` backs out one level.
 
-## 开发
+## Development
+
+Requires Node.js `^20.19.0` or `>=22.12.0` (the Vite 8 requirement).
+
+Install dependencies:
 
 ```bash
 npm install
+```
+
+Start the development server:
+
+```bash
 npm run dev
 ```
+
+Create a production build in `dist/` (runs `tsc -b` before the Vite build):
 
 ```bash
 npm run build
 ```
 
-`npm run build` 会先跑 `tsc -b` 再打包到 `dist/`，产物约 104 kB gzip（含字体约 190 kB）。
+## Deployment
 
-## 部署到 Cloudflare
+### Cloudflare Pages
 
-### 方式一：Cloudflare Pages（推荐，零配置）
+Connect the repository in Cloudflare Dashboard → Workers & Pages → Create → Pages, then use these settings:
 
-在 Cloudflare Dashboard → Workers & Pages → Create → Pages → 连接 Git 仓库：
-
-| 设置项 | 值 |
+| Setting | Value |
 |---|---|
 | Framework preset | Vite |
 | Build command | `npm run build` |
 | Build output directory | `dist` |
-| Node version | 20 或以上 |
+| Node.js | `^20.19.0` or `>=22.12.0` |
 
-没有客户端路由，不需要 SPA 回退规则；`public/_headers` 会被原样带进 `dist/`。
+The app has no client-side routes. `public/_headers` is copied into the build output.
 
-### 方式二：Workers 静态资源（命令行）
+### Cloudflare Workers static assets
+
+The `deploy` script builds the app and runs Wrangler using the settings in `wrangler.jsonc` (`assets.directory` is `./dist`). To deploy from the command line:
 
 ```bash
 npm run deploy
 ```
 
-等价于 `npm run build && npx wrangler deploy`，配置在 `wrangler.jsonc`
-（`assets.directory = "./dist"`，`not_found_handling = "single-page-application"`）。
-首次运行会要求 `npx wrangler login`。
+If Wrangler asks you to sign in, run:
 
-## 项目结构
-
-```
-src/
-  App.tsx              面板骨架：hero、列表/地球舞台、底栏、键盘、拖拽排序
-  components/
-    CityRow.tsx        一行城市：时间、日期/问候、日照条、移除
-    DaylightStrip.tsx  24 小时日照条与月相图标
-    Globe.tsx          canvas 地球：投影、晨昏线、标签、拖拽与惯性
-    HeroGlobe.tsx      标题中间那颗跟着选中城市转的小地球
-    CitySearch.tsx     "Add a city" 搜索
-    ThemePicker.tsx    23 套主题的色板选择器
-  lib/
-    themes.ts          从 colors.toml 生成的调色板
-    solar.ts           太阳位置、晨昏线、月相、正射投影、标签避让
-    time.ts            Intl 时区运算、城市表、时区目录
-    greetings.ts       Elsewhen 的分时问候
-    store.ts           设置持久化、每秒时钟、媒体查询
-    useTheme.ts        把主题写成 CSS 变量
-  data/
-    cities.json        74 座城市（Omarchy 原表）
-    world.json         68 条海岸线（Omarchy 原表）
+```bash
+npx wrangler login
 ```
 
-## 与 Elsewhen 的差异
+## Project structure
 
-- QML 没有 `Intl`，Elsewhen 靠外部 `date` 探针取时区偏移；这里改用
-  `Intl.DateTimeFormat` 直接算，因此可以纯静态部署。
-- Elsewhen 是 bar widget，只在面板打开时存在；这里是独立页面，
-  多了主题切换、拖动排序、移动端布局和 12/24 小时切换。
-- 去掉了天气（`units` 设置）与 IPC，只保留世界时钟本身。
+- `src/App.tsx` — application layout, city list, globe view, settings bar, and keyboard shortcuts.
+- `src/components/` — city rows, daylight strips, globe, city search, theme picker, and title globe.
+- `src/lib/` — time-zone and solar calculations, greetings, translations, city names, themes, and settings storage.
+- `src/data/` — bundled city and world coastline data.
+- `public/_headers` — response headers for the static deployment.
 
-## 许可
+## How it differs from Elsewhen
 
-界面与配色复刻自 Omarchy，原项目为 MIT 许可，© David Heinemeier Hansson；
-Elsewhen 面板作者 Jason Fried。本仓库同样以 MIT 发布，详见 [LICENSE](LICENSE)。
+Elsewhen runs as an Omarchy panel and uses a system `date` process to read time-zone offsets. This web version uses `Intl.DateTimeFormat`, so it can run as a static site. It also adds theme and language selection, city reordering, responsive layouts, and 12/24-hour clock controls. Weather settings and desktop IPC are not included.
+
+## Credits and license
+
+This project is distributed under the MIT License; see [LICENSE](LICENSE). Portions of its city and coastline data, theme palettes, and ported logic are based on [Omarchy](https://github.com/omacom/omarchy), copyright David Heinemeier Hansson, and its Elsewhen panel by Jason Fried. See [the reference notes](docs/omarchy-reference.md) for more detail.

@@ -255,6 +255,28 @@ export interface LabelCandidate {
   cosc: number;
 }
 
+/** True for the scripts whose glyphs fill a full cell: CJK, kana, hangul. */
+function isWide(ch: string): boolean {
+  const c = ch.codePointAt(0) ?? 0;
+  return (
+    (c >= 0x1100 && c <= 0x115f) ||
+    (c >= 0x2e80 && c <= 0xa4cf) ||
+    (c >= 0xac00 && c <= 0xd7a3) ||
+    (c >= 0xf900 && c <= 0xfaff) ||
+    (c >= 0xfe30 && c <= 0xfe6f) ||
+    (c >= 0xff00 && c <= 0xff60) ||
+    (c >= 0xffe0 && c <= 0xffe6) ||
+    (c >= 0x1f300 && c <= 0x1f64f)
+  );
+}
+
+/** A name's advance width in cells: Japanese and Chinese take two per glyph. */
+export function textWidth(name: string, charWidth: number): number {
+  let cells = 0;
+  for (const ch of name) cells += isWide(ch) ? 2 : 1;
+  return cells * charWidth;
+}
+
 /** Greedy label placement by rank, then nearest the disc center. */
 export function layoutLabels(
   candidates: LabelCandidate[],
@@ -270,7 +292,7 @@ export function layoutLabels(
     return q.cosc - p.cosc;
   });
   for (const c of sorted) {
-    const w = c.name.length * charWidth;
+    const w = textWidth(c.name, charWidth);
     let x = c.x + gap;
     if (x + w > maxX) x = c.x - gap - w;
     const box = { x, y: c.y - lineHeight / 2, w, h: lineHeight };

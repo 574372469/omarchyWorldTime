@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { City } from "./time";
+import { findCity, isValidZone, type City } from "./time";
 
 const KEY = "omarchy-world-clock:v1";
 
@@ -9,6 +9,8 @@ export interface Settings {
   hour24: boolean | null;
   offsetMode: "home" | "utc";
   rounded: boolean;
+  /** "auto" follows the browser's languages. */
+  lang: string;
   cities: City[];
 }
 
@@ -23,17 +25,31 @@ function read(): Partial<Settings> {
 
 export function loadSettings(seed: City[]): Settings {
   const stored = read();
+  const saved = Array.isArray(stored.cities) && stored.cities.length > 0
+    ? stored.cities.filter(
+        (c) =>
+          c &&
+          typeof c.id === "string" &&
+          typeof c.label === "string" &&
+          isValidZone(c.id),
+      )
+    : seed;
+  // Keep the actual local zone first, even after travelling or loading an old order.
+  const cities = seed.slice(0, 1);
+  const seen = new Set(cities.map((c) => c.id));
+  for (const city of saved) {
+    if (seen.has(city.id)) continue;
+    seen.add(city.id);
+    const known = findCity(city.id);
+    cities.push(known ? { ...known, label: city.label } : { id: city.id, label: city.label });
+  }
   return {
     theme: typeof stored.theme === "string" ? stored.theme : "",
     hour24: typeof stored.hour24 === "boolean" ? stored.hour24 : null,
     offsetMode: stored.offsetMode === "utc" ? "utc" : "home",
     rounded: stored.rounded === true,
-    cities:
-      Array.isArray(stored.cities) && stored.cities.length > 0
-        ? stored.cities
-            .filter((c) => c && typeof c.id === "string" && typeof c.label === "string")
-            .map((c) => ({ id: c.id, label: c.label }))
-        : seed,
+    lang: typeof stored.lang === "string" ? stored.lang : "auto",
+    cities,
   };
 }
 

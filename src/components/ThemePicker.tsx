@@ -1,16 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { alpha } from "../lib/color";
+import { LANGS, LANG_NAMES, t, type Lang } from "../lib/i18n";
 import { THEMES, type Theme } from "../lib/themes";
 
 interface Props {
   theme: Theme;
   rounded: boolean;
+  lang: Lang;
+  langChoice: string;
   onTheme: (id: string) => void;
   onRounded: (v: boolean) => void;
+  onLang: (choice: string) => void;
 }
 
 /** The theme swatches, in a dropdown the bar's right end opens. */
-export function ThemePicker({ theme, rounded, onTheme, onRounded }: Props) {
+export function ThemePicker({
+  theme,
+  rounded,
+  lang,
+  langChoice,
+  onTheme,
+  onRounded,
+  onLang,
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -38,8 +50,8 @@ export function ThemePicker({ theme, rounded, onTheme, onRounded }: Props) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Theme"
-        title={`Theme: ${theme.name}`}
+        aria-label={t(lang, "theme")}
+        title={`${t(lang, "theme")}: ${theme.name}`}
       >
         <span className="swatch-row" aria-hidden="true">
           <span style={{ background: theme.accent }} />
@@ -49,9 +61,9 @@ export function ThemePicker({ theme, rounded, onTheme, onRounded }: Props) {
       </button>
 
       {open && (
-        <div className="theme-menu" role="listbox" aria-label="Themes">
+        <div className="theme-menu" role="listbox" aria-label={t(lang, "themes")}>
           <div className="theme-menu-head">
-            <span>Omarchy themes</span>
+            <span>{t(lang, "themes")}</span>
             <span className="theme-menu-count">{THEMES.length}</span>
           </div>
           <div className="theme-grid">
@@ -83,9 +95,43 @@ export function ThemePicker({ theme, rounded, onTheme, onRounded }: Props) {
               checked={rounded}
               onChange={(e) => onRounded(e.target.checked)}
             />
-            <span>Rounded corners</span>
-            <span className="theme-toggle-hint">off matches Hyprland's rounding = 0</span>
+            <span>{t(lang, "rounded")}</span>
+            <span className="theme-toggle-hint">{t(lang, "roundedHint")}</span>
           </label>
+
+          <div className="theme-lang">
+            <span className="theme-menu-head">
+              <span>{t(lang, "language")}</span>
+              <span className="theme-menu-count">
+                {langChoice === "auto" ? t(lang, "languageAuto") : LANG_NAMES[lang]}
+              </span>
+            </span>
+            <div className="lang-grid">
+              <button
+                type="button"
+                className={`lang-item${langChoice === "auto" ? " is-current" : ""}`}
+                onClick={() => onLang("auto")}
+              >
+                {t(lang, "languageAuto")}
+              </button>
+              {LANGS.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  lang={l}
+                  className={`lang-item${langChoice === l ? " is-current" : ""}`}
+                  onClick={() => {
+                    onLang(l);
+                    // Picking a language closes the menu: the panel behind it
+                    // is now written in the one just chosen.
+                    setOpen(false);
+                  }}
+                >
+                  {LANG_NAMES[l]}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

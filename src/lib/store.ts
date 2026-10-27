@@ -129,8 +129,9 @@ export function useNow(): number {
       if (document.hidden) stop();
       else start();
     };
-    // Browsers do not fire timers while a machine sleeps; these fire on the
-    // way out and on the way back, and the return path re-reads the clock.
+    // Browsers do not fire timers while a machine sleeps. Coming back to the
+    // tab, the window or the page re-reads the clock; `resume` covers browsers
+    // that implement the Page Lifecycle API, and costs nothing where it is absent.
     const onWake = () => start();
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) start();

@@ -4,7 +4,9 @@ import { CitySearch } from "./components/CitySearch";
 import { Globe, type GlobeCity } from "./components/Globe";
 import { HeroGlobe } from "./components/HeroGlobe";
 import { ThemePicker } from "./components/ThemePicker";
+import { WidgetBar } from "./components/WidgetBar";
 import { localizedCity } from "./lib/cityNames";
+import { isDesktop, openExternal } from "./lib/desktop";
 import { localeOf, resolveLang, t } from "./lib/i18n";
 import { useMediaQuery, useNow, usePersistentSettings } from "./lib/store";
 import { themeById } from "./lib/themes";
@@ -384,10 +386,11 @@ export default function App() {
   );
 
   return (
-    <div className={`app${globeOn ? " is-globe" : ""}`}>
+    <div className={`app${globeOn ? " is-globe" : ""}${isDesktop ? " is-desktop" : ""}`}>
       <div className="scrim" aria-hidden="true" />
 
       <main className="panel" aria-label="World clock">
+        <WidgetBar lang={lang} />
         <header className="hero">
           <p className="hero-caption">{hereLine}</p>
           {preview !== null && (
@@ -473,6 +476,12 @@ export default function App() {
             href="https://github.com/574372469/omarchyWorldTime"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => {
+              if (!isDesktop) return;
+              // A widget has no tabs; the machine's browser opens the link.
+              e.preventDefault();
+              void openExternal("https://github.com/574372469/omarchyWorldTime");
+            }}
             aria-label="GitHub"
             title="GitHub"
           >

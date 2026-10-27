@@ -57,6 +57,8 @@ const EN = {
   hour12Title: "Switch to 24-hour time",
   offsetTitleHome: "Show the zone's own UTC offset",
   offsetTitleUtc: "Show the distance from here",
+  widgetTitle: "Keep on top",
+  closeWidget: "Close the widget",
 };
 
 export type Key = keyof typeof EN;
@@ -105,6 +107,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "切换到 24 小时制",
     offsetTitleHome: "显示该时区自身的 UTC 偏移",
     offsetTitleUtc: "显示相对本地的时差",
+    widgetTitle: "窗口置顶",
+    closeWidget: "关闭小组件",
   },
   "zh-Hant": {
     hereTime: "{city} 現在是 {time}",
@@ -147,6 +151,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "切換到 24 小時制",
     offsetTitleHome: "顯示該時區自身的 UTC 偏移",
     offsetTitleUtc: "顯示相對本地的時差",
+    widgetTitle: "視窗置頂",
+    closeWidget: "關閉小工具",
   },
   ja: {
     hereTime: "{city} は現在 {time}",
@@ -189,6 +195,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "24 時間表示に切り替え",
     offsetTitleHome: "このタイムゾーンの UTC オフセットを表示",
     offsetTitleUtc: "ここからの時差を表示",
+    widgetTitle: "常に手前に表示",
+    closeWidget: "ウィジェットを閉じる",
   },
   ko: {
     hereTime: "{city} 현재 {time}",
@@ -231,6 +239,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "24시간제로 전환",
     offsetTitleHome: "이 시간대의 UTC 오프셋 표시",
     offsetTitleUtc: "여기서부터의 시차 표시",
+    widgetTitle: "항상 위에 표시",
+    closeWidget: "위젯 닫기",
   },
   fr: {
     hereTime: "{city}, il est {time}",
@@ -273,6 +283,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "Passer en 24 h",
     offsetTitleHome: "Afficher le décalage UTC du fuseau",
     offsetTitleUtc: "Afficher l'écart avec ici",
+    widgetTitle: "Toujours au premier plan",
+    closeWidget: "Fermer le widget",
   },
   de: {
     hereTime: "{city}, es ist {time}",
@@ -315,6 +327,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "Auf 24-Stunden-Format wechseln",
     offsetTitleHome: "UTC-Versatz der Zone anzeigen",
     offsetTitleUtc: "Abstand von hier anzeigen",
+    widgetTitle: "Immer im Vordergrund",
+    closeWidget: "Widget schließen",
   },
   es: {
     hereTime: "{city}: son las {time}",
@@ -357,6 +371,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "Cambiar a 24 horas",
     offsetTitleHome: "Mostrar el desfase UTC de la zona",
     offsetTitleUtc: "Mostrar la diferencia con aquí",
+    widgetTitle: "Siempre visible",
+    closeWidget: "Cerrar el widget",
   },
   pt: {
     hereTime: "{city}: são {time}",
@@ -399,6 +415,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "Mudar para 24 horas",
     offsetTitleHome: "Mostrar o desvio UTC do fuso",
     offsetTitleUtc: "Mostrar a diferença daqui",
+    widgetTitle: "Sempre visível",
+    closeWidget: "Fechar o widget",
   },
   ru: {
     hereTime: "{city}, сейчас {time}",
@@ -441,6 +459,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "Переключить на 24 часа",
     offsetTitleHome: "Показать смещение UTC пояса",
     offsetTitleUtc: "Показать разницу с вами",
+    widgetTitle: "Поверх всех окон",
+    closeWidget: "Закрыть виджет",
   },
   it: {
     hereTime: "{city}: sono le {time}",
@@ -483,6 +503,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "Passa a 24 ore",
     offsetTitleHome: "Mostra lo scostamento UTC della zona",
     offsetTitleUtc: "Mostra la differenza da qui",
+    widgetTitle: "Sempre in primo piano",
+    closeWidget: "Chiudi il widget",
   },
   nl: {
     hereTime: "{city}: het is {time}",
@@ -525,6 +547,8 @@ const DICTS: Record<Lang, Dict> = {
     hour12Title: "Naar 24-uursklok",
     offsetTitleHome: "UTC-offset van de zone tonen",
     offsetTitleUtc: "Verschil met hier tonen",
+    widgetTitle: "Altijd op voorgrond",
+    closeWidget: "Widget sluiten",
   },
 };
 

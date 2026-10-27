@@ -80,12 +80,43 @@ npm run deploy
 npx wrangler login
 ```
 
+## 桌面小组件
+
+同一套面板也可以作为无边框桌面小组件运行（Tauri 2），支持 Windows 和 macOS。它常驻在其他窗口之上，保留城市列表，并自带一条标题栏：拖动可移动窗口，◆ 切换置顶，× 关闭。
+
+需要 Rust 工具链（`rustup`）。连接开发服务器运行：
+
+```bash
+npm run desktop
+```
+
+构建应用并打包当前平台的安装包：
+
+```bash
+npm run desktop:build
+```
+
+安装包输出在 `src-tauri/target/release/bundle/`（Windows 为 `.msi`/`.exe`，macOS 为 `.dmg`/`.app`）。应用图标由 `src-tauri/icons/app-icon.svg` 绘制，修改后用 `npx tauri icon src-tauri/icons/app-icon.png` 重新生成各平台图标。
+
+### 发版
+
+`.github/workflows/release.yml` 会在 GitHub 的构建机上同时打包两个平台。推送版本标签即可发布带安装包的 Release：
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+在 Actions → Release → Run workflow 手动运行则只构建、不发布。macOS 安装包未签名，首次打开需右键 → 打开，或在「系统设置 → 隐私与安全性」中允许。
+
 ## 项目结构
 
 - `src/App.tsx` — 应用布局、城市列表、地球视图、设置栏和快捷键。
 - `src/components/` — 城市行、日照条、地球、城市搜索、主题选择器和标题小地球。
 - `src/lib/` — 时区与日照计算、问候语、翻译、城市名、主题和设置存储。
-- `src/data/` — 内置城市与世界海岸线数据。
+- `src/data/` — 内置城市、世界海岸线数据，以及生成的「时区 → 国家」表。
+- `src-tauri/` — 桌面小组件的 Tauri 外壳、窗口配置、权限与图标。
+- `tools/` — `src/data/zoneCountries.ts` 的生成脚本。
 - `public/_headers` — 静态部署使用的响应头配置。
 
 ## 与 Elsewhen 的差异

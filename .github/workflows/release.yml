@@ -1,0 +1,58 @@
+name: Release
+
+# A version tag builds the widget for Windows and macOS and attaches the
+# installers to a GitHub release. Running it by hand builds them too, without
+# publishing anything.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ""
+            label: windows
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            label: macos
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('World Clock {0}', github.ref_name) || '' }}
+          releaseBody: |
+            The world clock as a desktop widget, for Windows and macOS.
+
+            - **Windows**: `.msi` (or the `.exe` setup) — the first launch installs the WebView2 runtime if the machine lacks it.
+            - **macOS**: `.dmg` — the build is unsigned, so on first open use right-click → Open, or allow it in System Settings → Privacy & Security.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

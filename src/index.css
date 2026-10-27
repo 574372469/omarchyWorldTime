@@ -854,6 +854,69 @@ textarea,
   font-size: var(--fs-caption);
 }
 
+
+/* ------------------------------------------------------- desktop widget */
+
+/* The widget's window is transparent and has no title bar of its own, so the
+   panel is the whole window, corner to corner. */
+.app.is-desktop {
+  padding: 0;
+  background: transparent;
+}
+
+.is-desktop .panel {
+  max-width: none;
+  height: 100dvh;
+  border-radius: var(--radius);
+  animation: none;
+}
+
+/* The bar the widget is dragged by, with its pin and close. */
+.widget-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  margin: calc(var(--popup-padding) * -0.5) 0 0;
+  padding: 2px 0 0;
+  font-size: var(--fs-caption);
+  color: var(--fg-fainter);
+  cursor: grab;
+  touch-action: none;
+}
+
+.widget-bar:active {
+  cursor: grabbing;
+}
+
+.widget-bar-title {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: var(--fs-caption);
+}
+
+.widget-bar-spacer {
+  flex: 1 1 auto;
+}
+
+.widget-bar-button {
+  padding: 2px 6px;
+  line-height: 1;
+  color: var(--fg-dim);
+}
+
+.widget-bar-button:hover {
+  color: var(--fg);
+}
+
+.widget-bar-button[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.widget-close:hover {
+  color: var(--red, #f7768e);
+}
+
 /* ---------------------------------------------------------------- globe */
 
 .globe-wrap {
@@ -1176,6 +1239,22 @@ textarea,
   color: var(--fg);
   background: var(--hover);
   border-color: color-mix(in oklab, var(--accent) 70%, transparent);
+}
+
+/* The widget bar is a row of its own above the panel's wide grid. */
+@media (min-width: 900px) {
+  .is-desktop .panel {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "widget widget"
+      "hero hero"
+      "stage stage"
+      "bar bar";
+  }
+
+  .is-desktop .widget-bar {
+    grid-area: widget;
+  }
 }
 
 /* ---------------------------------------------------------------- layouts */

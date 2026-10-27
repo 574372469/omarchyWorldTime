@@ -80,12 +80,43 @@ If Wrangler asks you to sign in, run:
 npx wrangler login
 ```
 
+## Desktop widget
+
+The same panel also runs as a frameless desktop widget (Tauri 2), on Windows and macOS. It sits above other windows, keeps the list of cities, and has its own title bar: drag it to move the window, ◆ pins it on top, × closes it.
+
+Requires the Rust toolchain (`rustup`). Run it against the dev server:
+
+```bash
+npm run desktop
+```
+
+Build the app and its installer for the current platform:
+
+```bash
+npm run desktop:build
+```
+
+Installers land in `src-tauri/target/release/bundle/` (`.msi`/`.exe` on Windows, `.dmg`/`.app` on macOS). The app icon is drawn by `src-tauri/icons/app-icon.svg`; after changing it, regenerate the platform set with `npx tauri icon src-tauri/icons/app-icon.png`.
+
+### Releases
+
+`.github/workflows/release.yml` builds both platforms on GitHub's runners. Push a version tag to publish a release with the installers attached:
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+Running the workflow by hand (Actions → Release → Run workflow) builds the same installers without creating a release. The macOS build is unsigned, so the first open needs right-click → Open or an allow in System Settings → Privacy & Security.
+
 ## Project structure
 
 - `src/App.tsx` — application layout, city list, globe view, settings bar, and keyboard shortcuts.
 - `src/components/` — city rows, daylight strips, globe, city search, theme picker, and title globe.
 - `src/lib/` — time-zone and solar calculations, greetings, translations, city names, themes, and settings storage.
-- `src/data/` — bundled city and world coastline data.
+- `src/data/` — bundled city and world coastline data, and the generated zone-to-country table.
+- `src-tauri/` — the desktop widget's Tauri shell, window config, capabilities, and icons.
+- `tools/` — the generator for `src/data/zoneCountries.ts`.
 - `public/_headers` — response headers for the static deployment.
 
 ## How it differs from Elsewhen

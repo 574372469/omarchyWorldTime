@@ -46,8 +46,10 @@ jobs:
           if-no-files-found: error
 
   # The desktop widget. macOS is built for both Apple silicon and Intel in
-  # one universal binary. Both legs only build: the release is made once, by
-  # the publish job, so two jobs never race to create it.
+  # one universal binary. Each leg signs its own update package and uploads it
+  # to the tag's release, so `latest.json` ends up listing every platform; the
+  # action's release lookup is retried, so two legs creating it at once is
+  # harmless.
   desktop:
     strategy:
       fail-fast: false
@@ -78,10 +80,27 @@ jobs:
 
       - run: npm ci
 
-      # No tagName or releaseId, so this only builds: the publish job makes the
-      # release once, after both platforms have finished.
+      # A tag publishes here. The signing key is what lets a running widget
+      # verify and install the update; without it the app still builds, but no
+      # updater files (or `latest.json`) are made. A hand run passes no tagName,
+      # so it only builds.
       - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('World Clock {0}', github.ref_name) || '' }}
+          releaseBody: |
+            The world clock for the web and the desktop.
+
+            - **Web**: `world-clock-web.zip` — the static site; unzip it at the root of any static host.
+            - **Windows**: `.msi` or the `.exe` setup — the first launch installs the WebView2 runtime if the machine lacks it.
+            - **macOS**: `.dmg`, universal (Apple silicon and Intel) — the build is unsigned, so on first open use right-click → Open, or allow it in System Settings → Privacy & Security.
+
+            Installed desktop copies update themselves: they offer this release shortly after launch, and one click installs it.
+          releaseDraft: false
+          prerelease: false
           args: ${{ matrix.args }}
 
       # The action's own globbing, so this works the same on Windows and macOS
@@ -89,14 +108,20 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: desktop-${{ matrix.label }}
+          # The installers plus the updater's own files: the .sig signatures
+          # and the packages a running app downloads to update itself.
           path: |
             src-tauri/target/**/release/bundle/msi/*.msi
             src-tauri/target/**/release/bundle/nsis/*.exe
             src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/**/*.sig
+            src-tauri/target/**/release/bundle/**/*.nsis.zip
+            src-tauri/target/**/release/bundle/**/*.msi.zip
+            src-tauri/target/**/release/bundle/**/*.app.tar.gz
           if-no-files-found: error
 
-  # One release holding every download. It waits for both platforms, so a
-  # failed build leaves no half-filled release behind.
+  # The site goes on the release the desktop legs made, once both have
+  # finished, so a failed build leaves no release advertising a site alone.
   publish:
     needs: [web, desktop]
     if: github.ref_type == 'tag'
@@ -104,39 +129,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: desktop-*
-          merge-multiple: true
-          path: assets
-
-      - uses: actions/download-artifact@v8
-        with:
           name: web
           path: assets
 
-      - name: Publish the release
+      - name: Attach the site to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
-        run: |
-          cat > notes.md <<'EOF'
-          The world clock for the web and the desktop.
-
-          - **Web**: `world-clock-web.zip` — the static site; unzip it at the root of any static host.
-          - **Windows**: `.msi` or the `.exe` setup — the first launch installs the WebView2 runtime if the machine lacks it.
-          - **macOS**: `.dmg`, universal (Apple silicon and Intel) — the build is unsigned, so on first open use right-click → Open, or allow it in System Settings → Privacy & Security.
-          EOF
-          # The installers are named after the product, so their names contain a
-          # space ("World Clock_1.0.0_x64-setup.exe"); a plain assets/* would be
-          # split into several arguments.
-          mapfile -d '' files < <(find assets -type f -print0)
-          ls -lh "${files[@]}"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            # A re-run of the same tag replaces the files instead of failing.
-            gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$TAG" "${files[@]}" \
-              --verify-tag \
-              --title "World Clock $TAG" \
-              --notes-file notes.md \
-              --repo "$GITHUB_REPOSITORY"
-          fi
+        run: gh release upload "$TAG" assets/world-clock-web.zip --clobber --repo "$GITHUB_REPOSITORY"

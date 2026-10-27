@@ -4,6 +4,7 @@ import { CitySearch } from "./components/CitySearch";
 import { Globe, type GlobeCity } from "./components/Globe";
 import { HeroGlobe } from "./components/HeroGlobe";
 import { ThemePicker } from "./components/ThemePicker";
+import { UpdateNotice } from "./components/UpdateNotice";
 import { WidgetBar } from "./components/WidgetBar";
 import { localizedCity } from "./lib/cityNames";
 import { isDesktop, openExternal } from "./lib/desktop";
@@ -391,6 +392,7 @@ export default function App() {
 
       <main className="panel" aria-label="World clock">
         <WidgetBar lang={lang} />
+        <UpdateNotice lang={lang} />
         <header className="hero">
           <p className="hero-caption">{hereLine}</p>
           {preview !== null && (

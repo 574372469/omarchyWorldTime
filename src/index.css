@@ -1241,12 +1241,61 @@ textarea,
   border-color: color-mix(in oklab, var(--accent) 70%, transparent);
 }
 
+/* A newer release, offered under the widget bar. It is a row of its own so the
+   clock below never shifts when it appears. */
+.update-notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  margin-top: calc(var(--sp-sm) * -0.5);
+  padding: 6px 8px;
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
+  border-radius: calc(var(--radius) * 0.5);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  font-size: var(--fs-caption);
+  color: var(--fg);
+}
+
+.update-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-button {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in oklab, var(--accent) 70%, transparent);
+  border-radius: calc(var(--radius) * 0.35);
+  color: var(--accent);
+  font-size: var(--fs-caption);
+}
+
+.update-button:hover {
+  background: var(--hover);
+}
+
+.update-dismiss {
+  flex: none;
+  padding: 2px 4px;
+  line-height: 1;
+  color: var(--fg-dim);
+}
+
+.update-dismiss:hover {
+  color: var(--fg);
+}
+
 /* The widget bar is a row of its own above the panel's wide grid. */
 @media (min-width: 900px) {
   .is-desktop .panel {
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       "widget widget"
+      "update update"
       "hero hero"
       "stage stage"
       "bar bar";
@@ -1254,6 +1303,10 @@ textarea,
 
   .is-desktop .widget-bar {
     grid-area: widget;
+  }
+
+  .is-desktop .update-notice {
+    grid-area: update;
   }
 }
 

@@ -109,11 +109,17 @@ git push origin v1.0.1
 
 Running the workflow by hand (Actions → Release → Run workflow) builds the same files without creating a release; download them from the run's artifacts. The macOS build is unsigned, so the first open needs right-click → Open or an allow in System Settings → Privacy & Security.
 
+### Updates
+
+The desktop widget updates itself. Shortly after launch, and every six hours after that, it asks GitHub for the latest release; when there is a newer version the panel offers it, and one click downloads, installs and relaunches into it. Only newer versions are offered, and each update is checked against the public key in `src-tauri/tauri.conf.json` before it runs.
+
+Releases carry the updater files (`latest.json`, the `.sig` signatures and the update packages) next to the installers. Signing needs the private key in the `TAURI_SIGNING_PRIVATE_KEY` repository secret; the matching public key is the one committed in the config. If the key is lost, published builds can no longer be updated — they have to be reinstalled by hand.
+
 ## Project structure
 
 - `src/App.tsx` — application layout, city list, globe view, settings bar, and keyboard shortcuts.
 - `src/components/` — city rows, daylight strips, globe, city search, theme picker, and title globe.
-- `src/lib/` — time-zone and solar calculations, greetings, translations, city names, themes, and settings storage.
+- `src/lib/` — time-zone and solar calculations, greetings, translations, city names, themes, settings storage, and the desktop shell's update check.
 - `src/data/` — bundled city and world coastline data, and the generated zone-to-country table.
 - `src-tauri/` — the desktop widget's Tauri shell, window config, capabilities, and icons.
 - `tools/` — the generator for `src/data/zoneCountries.ts`.

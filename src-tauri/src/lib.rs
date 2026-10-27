@@ -6,6 +6,8 @@
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Windows only: a widget should not take an Alt-Tab slot from the
             // apps behind it, but it stays on the taskbar so it can be found.

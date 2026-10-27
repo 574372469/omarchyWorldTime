@@ -2,6 +2,7 @@
 // platform hands them to us through Intl.
 
 import cityData from "../data/cities.json";
+import { t, type Lang } from "./i18n";
 
 export type City = { id: string; label: string; lat?: number; lon?: number };
 
@@ -73,6 +74,11 @@ export function zoneParts(zone: string, ms: number): ZoneParts {
   return partsOf(zone, ms);
 }
 
+/** Resolve aliases such as Asia/Calcutta using the browser's time-zone database. */
+export function canonicalZone(zone: string): string {
+  return partsFormatter(zone).resolvedOptions().timeZone;
+}
+
 /** The viewer's own wall clock, without a formatter. */
 export function localParts(ms: number): ZoneParts {
   const d = new Date(ms);
@@ -87,18 +93,35 @@ export function localParts(ms: number): ZoneParts {
 }
 
 const abbrCache = new Map<string, Intl.DateTimeFormat>();
-export function zoneAbbr(zone: string, ms: number): string {
-  let f = abbrCache.get(zone);
+/** The zone's own short name: "EST", "JST", or "GMT+8" where it has none. */
+export function zoneAbbr(zone: string, ms: number, locale = "en-US"): string {
+  const key = `${locale}|${zone}`;
+  let f = abbrCache.get(key);
   if (!f) {
-    f = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" });
-    abbrCache.set(zone, f);
+    f = new Intl.DateTimeFormat(locale, { timeZone: zone, timeZoneName: "short" });
+    abbrCache.set(key, f);
   }
   const part = f.formatToParts(new Date(ms)).find((p) => p.type === "timeZoneName");
-  return part ? part.value.replace(/^GMT/, "UTC") : "";
+  return part ? part.value : "";
+}
+
+/** True for "GMT+8", "UTC+5:30": a name that is only the offset again. */
+export function isNumericAbbr(abbr: string): boolean {
+  return /^(GMT|UTC)\s*[+\-−]/.test(abbr);
 }
 
 export function labelForZone(zone: string): string {
   return zone.split("/").pop()!.replace(/_/g, " ");
+}
+
+/** A stored zone the browser no longer knows would throw on every tick. */
+export function isValidZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone }).format();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function pad2(n: number): string {
@@ -122,11 +145,13 @@ export function dayDelta(a: ZoneParts, b: ZoneParts): number {
   );
 }
 
-export function dayLabel(delta: number): string {
+export function dayLabel(delta: number, lang: Lang = "en"): string {
   if (delta === 0) return "";
-  if (delta === 1) return "Tomorrow";
-  if (delta === -1) return "Yesterday";
-  return delta > 0 ? `+${delta} days` : `-${-delta} day${delta === -1 ? "" : "s"}`;
+  if (delta === 1) return t(lang, "tomorrow");
+  if (delta === -1) return t(lang, "yesterday");
+  return delta > 0
+    ? t(lang, "daysAhead", { n: delta })
+    : t(lang, "daysBehind", { n: -delta });
 }
 
 /** Absolute offset: "UTC+2", "UTC-3:30", "UTC". */
@@ -211,38 +236,10 @@ export function zoneCatalog(): ZoneOption[] {
   return out;
 }
 
-/** Cities to open with: here, plus four spread round the clock from it. */
-export function seedCities(now = Date.now()): City[] {
-  const home = localZone();
-  const homeOffset = zoneOffsetMinutes(home, now);
-  const homeCity = CITIES.find((c) => c.id === home);
-  const picked: City[] = [{ id: home, label: homeCity ? homeCity.label : labelForZone(home) }];
-
-  const candidates = CITIES.filter((c) => c.id !== home).map((c) => ({
-    city: c,
-    offset: zoneOffsetMinutes(c.id, now),
-  }));
-
-  while (picked.length < 5 && candidates.length > 0) {
-    let best = 0;
-    let bestScore = -1;
-    for (let i = 0; i < candidates.length; i++) {
-      const o = candidates[i].offset;
-      let nearest = Math.abs(o - homeOffset);
-      for (const p of picked) {
-        const po = zoneOffsetMinutes(p.id, now);
-        nearest = Math.min(nearest, Math.abs(o - po));
-      }
-      const score = nearest + candidates[i].city.rank * 0.01;
-      if (score > bestScore) {
-        bestScore = score;
-        best = i;
-      }
-    }
-    const chosen = candidates.splice(best, 1)[0];
-    picked.push({ id: chosen.city.id, label: chosen.city.label });
-  }
-  return picked;
+/** The viewer's zone, then New York, London, Dubai and Sydney, without repeats. */
+export function seedCities(home = localZone()): City[] {
+  const zones = [home, "America/New_York", "Europe/London", "Asia/Dubai", "Australia/Sydney"];
+  return [...new Set(zones)].map((id) => findCity(id) ?? { id, label: labelForZone(id) });
 }
 
 export function findCity(zone: string): City | undefined {

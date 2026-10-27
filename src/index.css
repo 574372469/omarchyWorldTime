@@ -6,8 +6,14 @@
  */
 
 :root {
-  --font: "JetBrains Mono Variable", "JetBrains Mono", "CaskaydiaMono Nerd Font", "SFMono-Regular",
-    "Cascadia Mono", "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* JetBrains Mono carries the Latin text; the CJK faces behind it are what
+     the panel falls back to for 简体 / 繁體 / 日本語 / 한국어 — without them
+     those glyphs would land on the generic monospace face. */
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", "CaskaydiaMono Nerd Font", "SFMono-Regular",
+    "Cascadia Mono", "Roboto Mono", ui-monospace, Menlo, Consolas;
+  --font: var(--mono), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+    "PingFang TC", "Hiragino Sans", "Noto Sans JP", "Malgun Gothic", "Apple SD Gothic Neo",
+    "Noto Sans KR", monospace;
 
   /* [font] base-size = 12, with the scale multipliers from Style.qml */
   --fs-caption: 10px;
@@ -82,6 +88,8 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior: none;
+  /* Disable double-tap zoom while preserving browser panning and pinch zoom. */
+  touch-action: manipulation;
 }
 
 #root {
@@ -103,6 +111,20 @@ input {
   background: none;
   border: 0;
   outline: none;
+}
+
+.panel {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 ::selection {
@@ -138,7 +160,8 @@ input {
   z-index: 1;
   width: 100%;
   max-width: 560px;
-  min-height: calc(100dvh - 10px);
+  height: calc(100dvh - 10px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--panel-gap);
@@ -226,7 +249,9 @@ input {
 
 .stage {
   position: relative;
-  flex: 1 1 auto;
+  /* 0 basis, so a long list scrolls inside the stage instead of pushing the
+     bar off the bottom of a phone screen. */
+  flex: 1 1 0;
   min-height: 0;
   display: grid;
 }
@@ -235,27 +260,30 @@ input {
 .stage-globe {
   grid-area: 1 / 1;
   min-height: 0;
-  transition:
-    opacity 240ms var(--ease-out),
-    transform 500ms var(--ease-out);
 }
 
+/* Until the globe is actually open, its chrome must not catch taps meant
+   for the list — aria-hidden alone does not remove the hit area. */
+.stage:not([data-globe="true"]) .globe-chrome,
+.stage:not([data-globe="true"]) .globe-exit {
+  pointer-events: none;
+}
+
+.stage-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The globe fades up in the first eighth of the flight, as Elsewhen's
+   bigGlobeOpacity does; zoom is driven a frame at a time from App. */
 .stage-globe {
-  opacity: 0;
+  opacity: clamp(0, calc(var(--zoom, 0) / 0.12), 1);
   pointer-events: none;
-  transform: scale(0.96);
-}
-
-.stage[data-globe="true"] .stage-list {
-  opacity: 0;
-  pointer-events: none;
-  transform: scale(0.98);
+  transform: scale(calc(0.96 + 0.04 * clamp(0, calc(var(--zoom, 0) / 0.12), 1)));
 }
 
 .stage[data-globe="true"] .stage-globe {
-  opacity: 1;
   pointer-events: auto;
-  transform: scale(1);
 }
 
 /* ---------------------------------------------------------------- list */
@@ -268,12 +296,66 @@ input {
   padding: var(--sp-xxl) var(--sp-xxs) var(--sp-sm);
 }
 
+/* ---- scrollbars: square, hairline-thin, in the theme's own ink */
+.stage-list,
+.search-results,
+.theme-grid {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--fg) 30%, transparent) transparent;
+}
+
+.stage-list::-webkit-scrollbar,
+.search-results::-webkit-scrollbar,
+.theme-grid::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.stage-list::-webkit-scrollbar-track,
+.search-results::-webkit-scrollbar-track,
+.theme-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* A 4px bar inset in a 10px lane, so it reads as a line, not a slab. */
+.stage-list::-webkit-scrollbar-thumb,
+.search-results::-webkit-scrollbar-thumb,
+.theme-grid::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--fg) 24%, transparent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: var(--radius);
+}
+
+.stage-list::-webkit-scrollbar-thumb:hover,
+.search-results::-webkit-scrollbar-thumb:hover,
+.theme-grid::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--accent) 70%, transparent);
+  background-clip: content-box;
+}
+
+.stage-list::-webkit-scrollbar-corner,
+.search-results::-webkit-scrollbar-corner,
+.theme-grid::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Elsewhen's knock: as the globe opens, each row is thrown to its own side
+   and falls out of the list, one beat after the row above it. The transform
+   itself is written by App from the same zoom the globe flies on. */
+.row-slot {
+  position: relative;
+  transform-origin: 50% 30%;
+  transition: transform 90ms linear;
+}
+
+/* The home row rides along once the rows beneath it have gone. */
 .row {
   position: relative;
   padding: 15px var(--row-padding-x);
   padding-bottom: 15px;
   cursor: grab;
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
   will-change: transform;
   outline: none;
 }
@@ -311,12 +393,94 @@ input {
 }
 
 .row-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  min-width: 0;
   font-size: var(--fs-subtitle);
   font-weight: 600;
   color: var(--row-fg);
+}
+
+.row-city {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The grip owns touch dragging; the rest of the row keeps native scrolling. */
+.row-grip {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  color: var(--row-dim);
+  opacity: 0.45;
+  cursor: grab;
+  touch-action: none;
+}
+
+.row:not(.is-home) {
+  padding-left: 28px;
+}
+
+.row-grip:hover,
+.row-grip:focus-visible {
+  opacity: 1;
+}
+
+.row-grip:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.row-grip:active {
+  cursor: grabbing;
+}
+
+/* "home" beside the first city, in the same small caps as a bar label. */
+.row-home {
+  flex: none;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--row-dim);
+  border: 1px solid color-mix(in oklab, var(--row-fg) 26%, transparent);
+  border-radius: var(--radius);
+}
+
+/* The viewer's own row stays put at the head of the list while the rest
+   scroll under it — a fixed reference to compare the other cities against. */
+.row-slot.is-home {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--bg);
+}
+
+/* Only once it has actually stuck, so nothing shadows the row at rest. */
+.stage-list[data-stuck="true"] .row-slot.is-home::after {
+  opacity: 1;
+}
+
+.row-slot.is-home::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 7px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--bg-darker) 55%, transparent),
+    transparent
+  );
+  opacity: 0;
+  transition: opacity 140ms linear;
+  pointer-events: none;
 }
 
 .row-meta {
@@ -574,6 +738,13 @@ input {
   font-size: var(--fs-body-small);
 }
 
+/* iOS zooms the page while focusing a field under 16px. */
+@media (max-width: 639px) {
+  .search-field input {
+    font-size: 16px;
+  }
+}
+
 .search-field input::placeholder {
   color: var(--fg-fainter);
 }
@@ -764,6 +935,10 @@ input {
     border-color 120ms linear;
 }
 
+.github-link {
+  text-decoration: none;
+}
+
 .bar-button:hover,
 .bar-button:focus-visible {
   color: var(--fg);
@@ -811,6 +986,11 @@ input {
   background: var(--bg);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
+  /* Never taller than the space above the bar: a short phone keeps every
+     language and theme reachable by scrolling inside the card. */
+  max-height: min(70dvh, calc(100dvh - 90px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
   animation: card-in 160ms var(--ease-out) both;
   transform-origin: bottom right;
@@ -832,7 +1012,7 @@ input {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
   gap: var(--sp-sm);
-  max-height: min(44dvh, 320px);
+  max-height: min(30dvh, 320px);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -902,6 +1082,44 @@ input {
   font-size: 9px;
 }
 
+.theme-lang {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+  padding-top: var(--sp-md);
+  border-top: 1px solid var(--hairline);
+}
+
+.lang-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: var(--sp-sm);
+}
+
+.lang-item {
+  padding: 6px 8px;
+  font-size: var(--fs-caption);
+  color: var(--fg-dim);
+  text-align: left;
+  border: 1px solid color-mix(in oklab, var(--fg) 14%, transparent);
+  border-radius: var(--radius);
+  transition:
+    color 120ms linear,
+    border-color 120ms linear,
+    background 120ms linear;
+}
+
+.lang-item:hover {
+  color: var(--fg);
+  border-color: color-mix(in oklab, var(--fg) 34%, transparent);
+}
+
+.lang-item.is-current {
+  color: var(--fg);
+  background: var(--hover);
+  border-color: color-mix(in oklab, var(--accent) 70%, transparent);
+}
+
 /* ---------------------------------------------------------------- layouts */
 
 /* Tablet and up: the panel is a popup card, not a full-screen sheet. */
@@ -912,10 +1130,21 @@ input {
   }
 
   .panel {
+    height: auto;
     min-height: 0;
     max-height: calc(100dvh - 32px);
     padding: var(--panel-padding);
     gap: var(--panel-gap);
+  }
+
+  /* The card sizes to its rows here, so the stage stops absorbing slack and
+     the list caps itself instead. */
+  .stage {
+    flex: 0 1 auto;
+  }
+
+  .stage-list {
+    max-height: min(62dvh, 620px);
   }
 
   .list {
@@ -967,6 +1196,7 @@ input {
   /* On a wide screen the globe is always there, so the list never hides. */
   .stage-list {
     grid-column: 1;
+    max-height: none;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: var(--sp-sm);
@@ -1008,14 +1238,21 @@ input {
   }
 
   .panel {
+    height: calc(100dvh - 10px);
     min-height: 0;
-    max-height: none;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    max-height: calc(100dvh - 10px);
+    overflow: hidden;
+  }
+
+  /* Keep the rows in their own short scroller, so the home row can stay
+     pinned and the footer never falls below the screen. */
+  .stage {
+    flex: 1 1 0;
   }
 
   .stage-list {
-    overflow: visible;
+    max-height: none;
+    overflow-y: auto;
   }
 
   .hero {

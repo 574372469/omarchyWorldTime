@@ -1,4 +1,5 @@
 import { alpha } from "../lib/color";
+import { t, type Lang } from "../lib/i18n";
 import { litSpans, moonPhase, type SunTimes } from "../lib/solar";
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   fainter: string;
   daylightMarker: string;
   rounded: boolean;
+  lang: Lang;
 }
 
 /** A city's 24 hours, midnight to midnight: daylight lit, a sun or moon at now. */
@@ -23,6 +25,7 @@ export function DaylightStrip({
   fainter,
   daylightMarker,
   rounded,
+  lang,
 }: Props) {
   const spans = sun ? litSpans(sun) : [{ x0: 6 / 24, x1: 18 / 24 }];
   const progress = minutes / 1440;
@@ -31,18 +34,18 @@ export function DaylightStrip({
 
   const label =
     sun?.kind === "midnightSun"
-      ? "Midnight sun"
+      ? t(lang, "midnightSun")
       : sun?.kind === "polarNight"
-        ? "Polar night"
+        ? t(lang, "polarNight")
         : sun
-          ? `Sunrise ${fmt(sun.riseMinutes)} · Sunset ${fmt(sun.setMinutes)}`
-          : "24 hours";
+          ? t(lang, "sunrise", { rise: fmt(sun.riseMinutes), set: fmt(sun.setMinutes) })
+          : t(lang, "allDay");
 
   return (
     <div
       className="strip"
       role="img"
-      aria-label={`${label}; local time ${fmt(minutes)}`}
+      aria-label={`${label}; ${t(lang, "localTime", { time: fmt(minutes) })}`}
       style={{ height: 18 }}
     >
       <div

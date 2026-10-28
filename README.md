@@ -100,14 +100,7 @@ Installers land in `src-tauri/target/release/bundle/` (`.msi`/`.exe` on Windows,
 
 ### Releases
 
-`.github/workflows/release.yml` builds the site and the desktop app for both platforms on GitHub's runners. Push a version tag to publish one release holding all three downloads — `world-clock-web.zip` (the static site), the Windows installer, and the macOS disk image:
-
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-Running the workflow by hand (Actions → Release → Run workflow) builds the same files without creating a release; download them from the run's artifacts. The macOS build is unsigned, so the first open needs right-click → Open or an allow in System Settings → Privacy & Security.
+Run `.github/workflows/Release` manually (Actions → Release → Run workflow). Pick **Run workflow** next to any commit and choose a branch or tag; when the run finishes, the artifacts include the web zip and the installers for Windows (`.msi` / `.exe`) and macOS (`.dmg`, universal). The build uploads `latest.json` plus the updater packages and their signatures next to the installers, so installed copies can update themselves through the built-in check. The macOS build is unsigned, so the first open needs right-click → Open or an allow in System Settings → Privacy & Security.
 
 ### Updates
 

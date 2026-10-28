@@ -100,14 +100,7 @@ npm run desktop:build
 
 ### 发版
 
-`.github/workflows/release.yml` 会在 GitHub 的构建机上打包网页版和两个平台的桌面版。推送版本标签即可发布一个包含全部下载的 Release：`world-clock-web.zip`（静态站点）、Windows 安装包和 macOS 磁盘映像。
-
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-在 Actions → Release → Run workflow 手动运行则只构建、不发布，产物可从该次运行的 artifacts 下载。macOS 安装包未签名，首次打开需右键 → 打开，或在「系统设置 → 隐私与安全性」中允许。
+直接运行 `.github/workflows/Release`（Actions → Release → Run workflow）。选择任意提交旁边的 **Run workflow**，选分支或标签；运行结束后，artifacts 里有网页版 zip、Windows 安装包（`.msi` 或 `.exe`）和 macOS 磁盘映像（`.dmg`，通用架构）。构建时还会把 `latest.json`、更新包及其签名一起上传到同一份 artifacts，已安装的桌面版可以通过内置检查来更新。macOS 安装包未签名，首次打开需右键 → 打开，或在「系统设置 → 隐私与安全性」中允许。
 
 ### 自动更新
 
